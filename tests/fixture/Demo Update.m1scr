@@ -1,0 +1,2 @@
+// Demo update: clamp speed to the configured gain and limit.
+Speed = Calculate.Min(Gain.Value, Limit);
