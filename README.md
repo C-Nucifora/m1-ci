@@ -41,6 +41,10 @@ runs it over every `.m1scr` it finds:
 Set [`fail-on-warning`](#inputs) to also fail on warning-severity diagnostics
 (line length, complexity, `eq`-over-`==`, …), which otherwise only annotate.
 
+If a `parameters.m1cfg` sits beside your `Project.m1prj`, the type checker
+auto-discovers it and uses its parameter **value types and units** — so the type
+check is parameter-type-aware with no extra configuration.
+
 Diagnostics are emitted as **inline annotations** on the pull request — each
 `m1-lint` / `m1-typecheck` finding lands on its exact line, and unformatted files
 are flagged by `m1-fmt`.
