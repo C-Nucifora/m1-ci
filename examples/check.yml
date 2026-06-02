@@ -18,7 +18,8 @@ jobs:
       # m1-typecheck discover the nearest Project.m1prj upward from each script.
       project-file: UQR-EV/01.00/Project.m1prj
       # Optional knobs (defaults shown):
-      # tools-ref: main
+      # tools-version: latest   # or pin a tag, e.g. v0.3.1
+      # fail-on-warning: false  # true = warnings fail the build too
       # run-fmt: true
       # run-lint: true
       # run-typecheck: true
