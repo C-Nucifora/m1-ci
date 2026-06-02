@@ -1,0 +1,24 @@
+# Example: drop this in your M1 project as `.github/workflows/m1.yml`.
+# It calls the reusable workflow in m1-ci to format-check, lint, and type-check
+# every `.m1scr` in the project on each push and pull request.
+
+name: M1
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@main
+    with:
+      # Directory holding your scripts (searched recursively).
+      scripts-path: UQR-EV/01.00/Scripts
+      # Project file — enables symbol-aware type checking. Omit to let
+      # m1-typecheck discover the nearest Project.m1prj upward from each script.
+      project-file: UQR-EV/01.00/Project.m1prj
+      # Optional knobs (defaults shown):
+      # tools-ref: main
+      # run-fmt: true
+      # run-lint: true
+      # run-typecheck: true

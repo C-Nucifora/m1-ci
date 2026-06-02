@@ -1,0 +1,108 @@
+name: M1 Check
+
+# Reusable workflow: format-check, lint, and type-check the M1 scripts in the
+# caller's repository with the C-Nucifora M1 toolchain.
+#
+# Use it from an M1 project:
+#
+#   jobs:
+#     check:
+#       uses: C-Nucifora/m1-ci/.github/workflows/check.yml@main
+#       with:
+#         scripts-path: UQR-EV/01.00/Scripts
+#         project-file: UQR-EV/01.00/Project.m1prj
+
+on:
+  workflow_call:
+    inputs:
+      scripts-path:
+        description: "Directory searched recursively for .m1scr scripts."
+        type: string
+        default: "."
+      project-file:
+        description: "Path to Project.m1prj for symbol-aware type checking. Empty = auto-discover upward from each script."
+        type: string
+        default: ""
+      tools-ref:
+        description: "Git branch of the C-Nucifora M1 tool repos to build (m1-fmt/m1-lint/m1-typecheck)."
+        type: string
+        default: "main"
+      run-fmt:
+        description: "Run m1-fmt --check."
+        type: boolean
+        default: true
+      run-lint:
+        description: "Run m1-lint."
+        type: boolean
+        default: true
+      run-typecheck:
+        description: "Run m1-typecheck."
+        type: boolean
+        default: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  m1-check:
+    name: M1 check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the project
+        uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install m1-fmt
+        if: inputs.run-fmt
+        env:
+          REF: ${{ inputs.tools-ref }}
+        run: cargo install --git https://github.com/C-Nucifora/m1-fmt.git --branch "$REF" m1-fmt
+
+      - name: Install m1-lint
+        if: inputs.run-lint
+        env:
+          REF: ${{ inputs.tools-ref }}
+        run: cargo install --git https://github.com/C-Nucifora/m1-lint.git --branch "$REF" m1-lint
+
+      - name: Install m1-typecheck
+        if: inputs.run-typecheck
+        env:
+          REF: ${{ inputs.tools-ref }}
+        run: cargo install --git https://github.com/C-Nucifora/m1-typecheck.git --branch "$REF" m1-typecheck
+
+      - name: Collect scripts
+        id: collect
+        env:
+          SCRIPTS_PATH: ${{ inputs.scripts-path }}
+        run: |
+          set -euo pipefail
+          # NUL-delimited so script names containing spaces are handled safely.
+          find "$SCRIPTS_PATH" -type f -name '*.m1scr' -print0 > "$RUNNER_TEMP/m1-scripts.nul"
+          count=$(grep -zc . "$RUNNER_TEMP/m1-scripts.nul" || true)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "Found $count .m1scr file(s) under '$SCRIPTS_PATH'."
+          if [ "$count" -eq 0 ]; then
+            echo "::warning::no .m1scr scripts found under '$SCRIPTS_PATH'"
+          fi
+
+      - name: Format check (m1-fmt --check)
+        if: inputs.run-fmt && steps.collect.outputs.count != '0'
+        run: xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-fmt --check
+
+      - name: Lint (m1-lint)
+        if: inputs.run-lint && steps.collect.outputs.count != '0'
+        run: xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-lint --format human
+
+      - name: Type check (m1-typecheck)
+        if: inputs.run-typecheck && steps.collect.outputs.count != '0'
+        env:
+          PROJECT_FILE: ${{ inputs.project-file }}
+        run: |
+          set -euo pipefail
+          proj=()
+          if [ -n "$PROJECT_FILE" ]; then
+            proj=(--project "$PROJECT_FILE")
+          fi
+          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-typecheck "${proj[@]}"
