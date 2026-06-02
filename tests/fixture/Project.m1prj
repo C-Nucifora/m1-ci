@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<MoTeCM1BuildSession>
+ <Project Name="Demo" TargetHardware="ecu120">
+  <SelectedModuleSets>
+   <File Name="MoTeC Comms"/>
+   <File Name="MoTeC Control"/>
+  </SelectedModuleSets>
+  <DataTypes>
+   <Type Name="Switch State" Storage="enum" Default="Off">
+    <Enum Name="Off" ContainerOrder="0"/>
+    <Enum Name="On" ContainerOrder="1"/>
+   </Type>
+  </DataTypes>
+  <ComponentStream>
+   <List>
+    <Component Classname="BuiltIn.GroupCompound" Name="Root.Demo"/>
+    <Component Classname="BuiltIn.Channel" Name="Root.Demo.Speed"><Props Security="Tune"/></Component>
+    <Component Classname="BuiltIn.Parameter" Name="Root.Demo.Gain.Value"><Props/></Component>
+    <Component Classname="BuiltIn.Constant" Name="Root.Demo.Limit"><Props Value="100"/></Component>
+    <Component Classname="BuiltIn.FuncUser" Filename="Demo Update.m1scr" Name="Root.Demo.Update"/>
+   </List>
+  </ComponentStream>
+ </Project>
+</MoTeCM1BuildSession>

@@ -29,8 +29,8 @@ A ready-to-copy version lives in [`examples/check.yml`](examples/check.yml).
 
 ## What it runs
 
-The reusable [`check.yml`](.github/workflows/check.yml) builds the tools from
-source (`cargo install`) and runs them over every `.m1scr` it finds:
+The reusable [`check.yml`](.github/workflows/check.yml) installs the toolchain and
+runs it over every `.m1scr` it finds:
 
 | Step | Tool | Fails the build when… |
 |------|------|-----------------------|
@@ -38,8 +38,28 @@ source (`cargo install`) and runs them over every `.m1scr` it finds:
 | Lint | `m1-lint` | an **error**-severity lint fires (or a syntax error) |
 | Type check | `m1-typecheck` | an **error**-severity type diagnostic fires |
 
+Set [`fail-on-warning`](#inputs) to also fail on warning-severity diagnostics
+(line length, complexity, `eq`-over-`==`, …), which otherwise only annotate.
+
+If a `parameters.m1cfg` sits beside your `Project.m1prj`, the type checker
+auto-discovers it and uses its parameter **value types and units** — so the type
+check is parameter-type-aware with no extra configuration.
+
+Diagnostics are emitted as **inline annotations** on the pull request — each
+`m1-lint` / `m1-typecheck` finding lands on its exact line, and unformatted files
+are flagged by `m1-fmt`.
+
 Script names containing spaces (e.g. `CAN.Mission Critical Transcieve 500Hz.m1scr`)
 are handled correctly (NUL-delimited file lists).
+
+## How the tools are installed
+
+`check.yml` downloads the **prebuilt release binaries** published by each tool
+repo (`m1-fmt` / `m1-lint` / `m1-typecheck`) for the runner. If a release is
+unavailable for the requested `tools-version`, it transparently falls back to
+building from source (`cargo install --git`). Default `tools-version: latest`
+means fixes to the toolchain (the same engine behind the M1 language server) flow
+into your CI automatically; pin to a tag for reproducible builds.
 
 ## Inputs
 
@@ -47,10 +67,11 @@ are handled correctly (NUL-delimited file lists).
 |-------|---------|-------------|
 | `scripts-path` | `.` | Directory searched recursively for `.m1scr` files. |
 | `project-file` | `""` | `Project.m1prj` for symbol-aware type checking. Empty = `m1-typecheck` auto-discovers the nearest one upward from each script. |
-| `tools-ref` | `main` | Git **branch** of the `m1-fmt` / `m1-lint` / `m1-typecheck` repos to build. |
+| `tools-version` | `latest` | Toolchain release to use: `latest`, or a tag like `v0.3.1` to pin all three tools. |
 | `run-fmt` | `true` | Run the formatter check. |
 | `run-lint` | `true` | Run the linter. |
 | `run-typecheck` | `true` | Run the type checker. |
+| `fail-on-warning` | `false` | Fail on warning-severity diagnostics, not just errors. |
 
 ## Pinning
 

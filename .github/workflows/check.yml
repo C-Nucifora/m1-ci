@@ -1,7 +1,8 @@
 name: M1 Check
 
 # Reusable workflow: format-check, lint, and type-check the M1 scripts in the
-# caller's repository with the C-Nucifora M1 toolchain.
+# caller's repository with the C-Nucifora M1 toolchain. Diagnostics surface as
+# inline annotations on the pull request.
 #
 # Use it from an M1 project:
 #
@@ -11,6 +12,10 @@ name: M1 Check
 #       with:
 #         scripts-path: UQR-EV/01.00/Scripts
 #         project-file: UQR-EV/01.00/Project.m1prj
+#
+# Tools are installed from the prebuilt release binaries published by each tool
+# repo (m1-fmt / m1-lint / m1-typecheck); if a release is unavailable they are
+# built from source as a fallback, so this works even before binaries exist.
 
 on:
   workflow_call:
@@ -23,10 +28,10 @@ on:
         description: "Path to Project.m1prj for symbol-aware type checking. Empty = auto-discover upward from each script."
         type: string
         default: ""
-      tools-ref:
-        description: "Git branch of the C-Nucifora M1 tool repos to build (m1-fmt/m1-lint/m1-typecheck)."
+      tools-version:
+        description: "Toolchain release to use: 'latest' or a tag like 'v0.3.1'. Pins all three tools to the same release tag."
         type: string
-        default: "main"
+        default: "latest"
       run-fmt:
         description: "Run m1-fmt --check."
         type: boolean
@@ -39,6 +44,10 @@ on:
         description: "Run m1-typecheck."
         type: boolean
         default: true
+      fail-on-warning:
+        description: "Fail the build on warning-severity diagnostics, not just errors. m1-lint/m1-typecheck exit 0 on warnings by default."
+        type: boolean
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -51,26 +60,91 @@ jobs:
       - name: Check out the project
         uses: actions/checkout@v6
 
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install m1-fmt
-        if: inputs.run-fmt
+      - name: Install M1 tools
         env:
-          REF: ${{ inputs.tools-ref }}
-        run: cargo install --git https://github.com/C-Nucifora/m1-fmt.git --branch "$REF" m1-fmt
+          GH_TOKEN: ${{ github.token }}
+          TOOLS_VERSION: ${{ inputs.tools-version }}
+          RUN_FMT: ${{ inputs.run-fmt }}
+          RUN_LINT: ${{ inputs.run-lint }}
+          RUN_TYPECHECK: ${{ inputs.run-typecheck }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          target=x86_64-unknown-linux-gnu
 
-      - name: Install m1-lint
-        if: inputs.run-lint
-        env:
-          REF: ${{ inputs.tools-ref }}
-        run: cargo install --git https://github.com/C-Nucifora/m1-lint.git --branch "$REF" m1-lint
+          install_tool() {
+            tool="$1"
+            repo="C-Nucifora/$tool"
+            asset="$tool-$target"
+            dest="$HOME/.local/bin/$tool"
+            echo "::group::Install $tool ($TOOLS_VERSION)"
+            rm -f "$RUNNER_TEMP/$asset"
+            if [ "$TOOLS_VERSION" = latest ]; then
+              gh release download --repo "$repo" --pattern "$asset" \
+                --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
+            else
+              gh release download "$TOOLS_VERSION" --repo "$repo" --pattern "$asset" \
+                --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
+            fi
+            if [ -f "$RUNNER_TEMP/$asset" ]; then
+              mv "$RUNNER_TEMP/$asset" "$dest"
+              chmod +x "$dest"
+              echo "Installed $tool from a release binary."
+            else
+              echo "No release asset for $tool ($TOOLS_VERSION); building from source."
+              if [ "$TOOLS_VERSION" = latest ]; then
+                cargo install --git "https://github.com/$repo.git" --root "$HOME/.local" "$tool"
+              else
+                cargo install --git "https://github.com/$repo.git" --tag "$TOOLS_VERSION" --root "$HOME/.local" "$tool"
+              fi
+            fi
+            "$dest" --help >/dev/null 2>&1 || true
+            echo "::endgroup::"
+          }
 
-      - name: Install m1-typecheck
-        if: inputs.run-typecheck
-        env:
-          REF: ${{ inputs.tools-ref }}
-        run: cargo install --git https://github.com/C-Nucifora/m1-typecheck.git --branch "$REF" m1-typecheck
+          [ "$RUN_FMT" = true ] && install_tool m1-fmt
+          [ "$RUN_LINT" = true ] && install_tool m1-lint
+          [ "$RUN_TYPECHECK" = true ] && install_tool m1-typecheck
+          true
+
+      - name: Register problem matchers
+        run: |
+          set -euo pipefail
+          # Inlined (not committed-and-referenced) because a reusable workflow runs
+          # in the *caller's* checkout — m1-ci's own files are not present here.
+          cat > "$RUNNER_TEMP/m1-matchers.json" <<'JSON'
+          {
+            "problemMatcher": [
+              {
+                "owner": "m1-diagnostic",
+                "severity": "error",
+                "pattern": [
+                  {
+                    "regexp": "^(.+):(\\d+):(\\d+):\\s+(error|warning|info|hint)\\[[^\\]]*\\]:\\s+(.+)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                  }
+                ]
+              },
+              {
+                "owner": "m1-fmt-check",
+                "severity": "error",
+                "pattern": [
+                  {
+                    "regexp": "^(.+):\\s+would reformat$",
+                    "file": 1,
+                    "message": 0
+                  }
+                ]
+              }
+            ]
+          }
+          JSON
+          echo "::add-matcher::$RUNNER_TEMP/m1-matchers.json"
 
       - name: Collect scripts
         id: collect
@@ -80,7 +154,8 @@ jobs:
           set -euo pipefail
           # NUL-delimited so script names containing spaces are handled safely.
           find "$SCRIPTS_PATH" -type f -name '*.m1scr' -print0 > "$RUNNER_TEMP/m1-scripts.nul"
-          count=$(grep -zc . "$RUNNER_TEMP/m1-scripts.nul" || true)
+          # Count -print0 records by their NUL terminators (robust for names with spaces/newlines).
+          count=$(tr -dc '\0' < "$RUNNER_TEMP/m1-scripts.nul" | wc -c | tr -d ' ')
           echo "count=$count" >> "$GITHUB_OUTPUT"
           echo "Found $count .m1scr file(s) under '$SCRIPTS_PATH'."
           if [ "$count" -eq 0 ]; then
@@ -93,16 +168,33 @@ jobs:
 
       - name: Lint (m1-lint)
         if: inputs.run-lint && steps.collect.outputs.count != '0'
-        run: xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-lint --format human
+        env:
+          FAIL_ON_WARNING: ${{ inputs.fail-on-warning }}
+        run: |
+          set -uo pipefail
+          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-lint | tee "$RUNNER_TEMP/m1-lint.out"
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then exit "$code"; fi
+          if [ "$FAIL_ON_WARNING" = true ] && grep -q 'warning\[' "$RUNNER_TEMP/m1-lint.out"; then
+            echo "::error::fail-on-warning: m1-lint reported warning-severity diagnostics"
+            exit 1
+          fi
 
       - name: Type check (m1-typecheck)
         if: inputs.run-typecheck && steps.collect.outputs.count != '0'
         env:
           PROJECT_FILE: ${{ inputs.project-file }}
+          FAIL_ON_WARNING: ${{ inputs.fail-on-warning }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           proj=()
           if [ -n "$PROJECT_FILE" ]; then
             proj=(--project "$PROJECT_FILE")
           fi
-          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-typecheck "${proj[@]}"
+          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-typecheck "${proj[@]}" | tee "$RUNNER_TEMP/m1-typecheck.out"
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then exit "$code"; fi
+          if [ "$FAIL_ON_WARNING" = true ] && grep -q 'warning\[' "$RUNNER_TEMP/m1-typecheck.out"; then
+            echo "::error::fail-on-warning: m1-typecheck reported warning-severity diagnostics"
+            exit 1
+          fi
