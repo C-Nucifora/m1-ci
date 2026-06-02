@@ -52,6 +52,11 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# This reusable workflow only reads the caller's checkout and downloads public
+# tool release binaries — no write scopes required.
+permissions:
+  contents: read
+
 jobs:
   m1-check:
     name: M1 check
