@@ -92,3 +92,9 @@ deliberately when you want the newer toolchain.
 ## License
 
 GPL-3.0 — see [LICENSE](LICENSE).
+
+## Trademark
+
+Independent, community-built open-source tooling for the MoTeC® M1 script
+language. Not affiliated with, authorised, or endorsed by MoTeC Pty Ltd.
+"MoTeC" and "M1" are trademarks of MoTeC Pty Ltd.
