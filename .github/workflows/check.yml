@@ -28,10 +28,28 @@ on:
         description: "Path to Project.m1prj for symbol-aware type checking. Empty = auto-discover upward from each script."
         type: string
         default: ""
-      tools-version:
-        description: "Toolchain release to use: 'latest' or a tag like 'v0.3.1'. Pins all three tools to the same release tag."
+      # Per-tool version pins. These default to specific release tags so that a
+      # given m1-ci tag installs a frozen, reproducible toolchain — pinning
+      # `m1-ci@vX.Y.Z` means your CI keeps working even as the tools release new
+      # (possibly stricter) versions. Each accepts a tag (e.g. "v0.4.1") or
+      # "latest". When the tools release, bump these defaults and cut a new m1-ci
+      # release; callers pinned to an older m1-ci tag are unaffected.
+      fmt-version:
+        description: "m1-fmt release to install: a tag like 'v0.4.1', or 'latest'."
         type: string
-        default: "latest"
+        default: "v0.4.1"
+      lint-version:
+        description: "m1-lint release to install: a tag like 'v0.5.1', or 'latest'."
+        type: string
+        default: "v0.5.1"
+      typecheck-version:
+        description: "m1-typecheck release to install: a tag like 'v0.16.0', or 'latest'."
+        type: string
+        default: "v0.16.0"
+      tools-version:
+        description: "Master override (advanced). Empty (default) uses the pinned per-tool versions above. Set to 'latest' to track the newest release of every tool; a single tag forces all three (the tools are independently versioned, so a shared tag may not exist for all)."
+        type: string
+        default: ""
       run-fmt:
         description: "Run m1-fmt --check."
         type: boolean
@@ -69,6 +87,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TOOLS_VERSION: ${{ inputs.tools-version }}
+          FMT_VERSION: ${{ inputs.fmt-version }}
+          LINT_VERSION: ${{ inputs.lint-version }}
+          TYPECHECK_VERSION: ${{ inputs.typecheck-version }}
           RUN_FMT: ${{ inputs.run-fmt }}
           RUN_LINT: ${{ inputs.run-lint }}
           RUN_TYPECHECK: ${{ inputs.run-typecheck }}
@@ -80,37 +101,40 @@ jobs:
 
           install_tool() {
             tool="$1"
+            version="$2"
+            # Master override wins over the per-tool pin when set.
+            [ -n "$TOOLS_VERSION" ] && version="$TOOLS_VERSION"
             repo="C-Nucifora/$tool"
             asset="$tool-$target"
             dest="$HOME/.local/bin/$tool"
-            echo "::group::Install $tool ($TOOLS_VERSION)"
+            echo "::group::Install $tool ($version)"
             rm -f "$RUNNER_TEMP/$asset"
-            if [ "$TOOLS_VERSION" = latest ]; then
+            if [ "$version" = latest ]; then
               gh release download --repo "$repo" --pattern "$asset" \
                 --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
             else
-              gh release download "$TOOLS_VERSION" --repo "$repo" --pattern "$asset" \
+              gh release download "$version" --repo "$repo" --pattern "$asset" \
                 --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
             fi
             if [ -f "$RUNNER_TEMP/$asset" ]; then
               mv "$RUNNER_TEMP/$asset" "$dest"
               chmod +x "$dest"
-              echo "Installed $tool from a release binary."
+              echo "Installed $tool $version from a release binary."
             else
-              echo "No release asset for $tool ($TOOLS_VERSION); building from source."
-              if [ "$TOOLS_VERSION" = latest ]; then
+              echo "No release asset for $tool ($version); building from source."
+              if [ "$version" = latest ]; then
                 cargo install --git "https://github.com/$repo.git" --root "$HOME/.local" "$tool"
               else
-                cargo install --git "https://github.com/$repo.git" --tag "$TOOLS_VERSION" --root "$HOME/.local" "$tool"
+                cargo install --git "https://github.com/$repo.git" --tag "$version" --root "$HOME/.local" "$tool"
               fi
             fi
             "$dest" --help >/dev/null 2>&1 || true
             echo "::endgroup::"
           }
 
-          [ "$RUN_FMT" = true ] && install_tool m1-fmt
-          [ "$RUN_LINT" = true ] && install_tool m1-lint
-          [ "$RUN_TYPECHECK" = true ] && install_tool m1-typecheck
+          [ "$RUN_FMT" = true ] && install_tool m1-fmt "$FMT_VERSION"
+          [ "$RUN_LINT" = true ] && install_tool m1-lint "$LINT_VERSION"
+          [ "$RUN_TYPECHECK" = true ] && install_tool m1-typecheck "$TYPECHECK_VERSION"
           true
 
       - name: Register problem matchers

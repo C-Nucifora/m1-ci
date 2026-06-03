@@ -10,7 +10,10 @@ on:
 
 jobs:
   check:
-    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@main
+    # Pin m1-ci to a release tag, not @main — the tag freezes the M1 toolchain
+    # versions this workflow installs, so a new (stricter) tool release can't
+    # break your CI without you bumping this tag deliberately.
+    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.2.0
     with:
       # Directory holding your scripts (searched recursively).
       scripts-path: UQR-EV/01.00/Scripts
@@ -18,7 +21,12 @@ jobs:
       # m1-typecheck discover the nearest Project.m1prj upward from each script.
       project-file: UQR-EV/01.00/Project.m1prj
       # Optional knobs (defaults shown):
-      # tools-version: latest   # or pin a tag, e.g. v0.3.1
+      # The toolchain is pinned by THIS m1-ci tag. Override a single tool only
+      # if you need to (a tag like "v0.5.1", or "latest"):
+      # fmt-version: v0.4.1
+      # lint-version: v0.5.1
+      # typecheck-version: v0.16.0
+      # tools-version: latest   # master override: track newest of every tool
       # fail-on-warning: false  # true = warnings fail the build too
       # run-fmt: true
       # run-lint: true

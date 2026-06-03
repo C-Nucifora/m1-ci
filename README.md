@@ -19,7 +19,7 @@ on:
 
 jobs:
   check:
-    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@main
+    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.2.0
     with:
       scripts-path: UQR-EV/01.00/Scripts
       project-file: UQR-EV/01.00/Project.m1prj
@@ -56,10 +56,15 @@ are handled correctly (NUL-delimited file lists).
 
 `check.yml` downloads the **prebuilt release binaries** published by each tool
 repo (`m1-fmt` / `m1-lint` / `m1-typecheck`) for the runner. If a release is
-unavailable for the requested `tools-version`, it transparently falls back to
-building from source (`cargo install --git`). Default `tools-version: latest`
-means fixes to the toolchain (the same engine behind the M1 language server) flow
-into your CI automatically; pin to a tag for reproducible builds.
+unavailable for the requested version, it transparently falls back to building
+from source (`cargo install --git`).
+
+The tool versions are **pinned by this m1-ci release** — the `fmt-version` /
+`lint-version` / `typecheck-version` defaults baked into `check.yml` name exact
+tags. So pinning `m1-ci@vX.Y.Z` installs a **frozen, reproducible toolchain**: a
+new (possibly stricter) tool release can't change your CI result until you bump
+the m1-ci tag. To track the newest tools instead, set `tools-version: latest` (or
+override a single tool's `*-version`).
 
 ## Inputs
 
@@ -67,7 +72,10 @@ into your CI automatically; pin to a tag for reproducible builds.
 |-------|---------|-------------|
 | `scripts-path` | `.` | Directory searched recursively for `.m1scr` files. |
 | `project-file` | `""` | `Project.m1prj` for symbol-aware type checking. Empty = `m1-typecheck` auto-discovers the nearest one upward from each script. |
-| `tools-version` | `latest` | Toolchain release to use: `latest`, or a tag like `v0.3.1` to pin all three tools. |
+| `fmt-version` | `v0.4.1` | `m1-fmt` release to install: a tag, or `latest`. |
+| `lint-version` | `v0.5.1` | `m1-lint` release to install: a tag, or `latest`. |
+| `typecheck-version` | `v0.16.0` | `m1-typecheck` release to install: a tag, or `latest`. |
+| `tools-version` | `""` | Master override (advanced). Empty = use the pinned per-tool versions above. `latest` = newest of every tool; a single tag forces all three (they are independently versioned). |
 | `run-fmt` | `true` | Run the formatter check. |
 | `run-lint` | `true` | Run the linter. |
 | `run-typecheck` | `true` | Run the type checker. |
@@ -75,8 +83,11 @@ into your CI automatically; pin to a tag for reproducible builds.
 
 ## Pinning
 
-`@main` always tracks the latest workflow. For reproducible CI, pin to a tag or
-commit SHA instead, e.g. `uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.1.0`.
+`@main` always tracks the latest workflow **and** the newest pinned tool defaults
+on `main`. For reproducible CI, pin to a tag — the tag freezes both the workflow
+and the M1 toolchain versions it installs, e.g.
+`uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.2.0`. Bump the tag
+deliberately when you want the newer toolchain.
 
 ## License
 
