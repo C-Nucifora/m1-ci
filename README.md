@@ -89,6 +89,14 @@ and the M1 toolchain versions it installs, e.g.
 `uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.2.0`. Bump the tag
 deliberately when you want the newer toolchain.
 
+## Releasing
+
+Releases are automated. Bump the version in [`VERSION`](VERSION) in a PR; when it
+merges to `main`, [`.github/workflows/release.yml`](.github/workflows/release.yml)
+cuts the matching `vX.Y.Z` tag + GitHub Release (with generated notes) if one
+doesn't already exist. The job is idempotent — re-running it for an existing
+version is a no-op — and can also be triggered manually from the Actions tab.
+
 ## License
 
 GPL-3.0 — see [LICENSE](LICENSE).
