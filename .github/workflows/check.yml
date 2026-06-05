@@ -35,17 +35,17 @@ on:
       # "latest". When the tools release, bump these defaults and cut a new m1-ci
       # release; callers pinned to an older m1-ci tag are unaffected.
       fmt-version:
-        description: "m1-fmt release to install: a tag like 'v0.4.1', or 'latest'."
+        description: "m1-fmt release to install: a tag like 'v0.5.0', or 'latest'."
         type: string
-        default: "v0.4.1"
+        default: "v0.5.0"
       lint-version:
-        description: "m1-lint release to install: a tag like 'v0.5.1', or 'latest'."
+        description: "m1-lint release to install: a tag like 'v0.8.0', or 'latest'."
         type: string
-        default: "v0.5.1"
+        default: "v0.8.0"
       typecheck-version:
-        description: "m1-typecheck release to install: a tag like 'v0.16.0', or 'latest'."
+        description: "m1-typecheck release to install: a tag like 'v0.20.0', or 'latest'."
         type: string
-        default: "v0.16.0"
+        default: "v0.20.0"
       tools-version:
         description: "Master override (advanced). Empty (default) uses the pinned per-tool versions above. Set to 'latest' to track the newest release of every tool; a single tag forces all three (the tools are independently versioned, so a shared tag may not exist for all)."
         type: string
@@ -117,6 +117,17 @@ jobs:
                 --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
             fi
             if [ -f "$RUNNER_TEMP/$asset" ]; then
+              # Verify GitHub-native build provenance before trusting the binary
+              # we are about to chmod +x and run on the caller's source (#7). Once
+              # a tool repo attests its release binaries (actions/attest-build-
+              # provenance), a tampered or forged binary fails this check. A
+              # release that predates attestation has none yet, so warn and proceed
+              # during the rollout rather than break installs.
+              if gh attestation verify "$RUNNER_TEMP/$asset" --repo "$repo" >/dev/null 2>&1; then
+                echo "Verified build provenance for $tool $version."
+              else
+                echo "::warning::no verifiable build provenance for $tool $version (release predates attestation); proceeding."
+              fi
               mv "$RUNNER_TEMP/$asset" "$dest"
               chmod +x "$dest"
               echo "Installed $tool $version from a release binary."

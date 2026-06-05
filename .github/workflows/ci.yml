@@ -20,7 +20,16 @@ jobs:
       - name: Run actionlint
         run: |
           set -euo pipefail
-          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          # Pin actionlint to a fixed version and verify its SHA256, rather than
+          # piping a script fetched from the repo's mutable `main` HEAD into bash
+          # — a supply-chain risk if that script (or `main`) were ever tampered
+          # with (#8).
+          VER=1.7.7
+          SHA=023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757
+          curl -fsSL -o actionlint.tgz \
+            "https://github.com/rhysd/actionlint/releases/download/v${VER}/actionlint_${VER}_linux_amd64.tar.gz"
+          echo "${SHA}  actionlint.tgz" | sha256sum -c -
+          tar -xzf actionlint.tgz actionlint
           ./actionlint -color
 
   # Dogfood: run the reusable workflow against the clean fixture project. It must
