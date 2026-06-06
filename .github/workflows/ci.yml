@@ -32,6 +32,55 @@ jobs:
           tar -xzf actionlint.tgz actionlint
           ./actionlint -color
 
+  # The local pre-commit hooks and the CI workflow must install the SAME tool
+  # versions. tools.env is the single source of truth; assert check.yml's input
+  # defaults match it so the two halves can never silently drift.
+  tools-pins:
+    name: tools.env matches check.yml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Assert pinned versions agree
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          . ./tools.env
+          default_for() {
+            awk -v key="$1-version:" '
+              $1 == key { found = 1 }
+              found && $1 == "default:" { gsub(/"/, "", $2); print $2; exit }
+            ' .github/workflows/check.yml
+          }
+          fail=0
+          check() {
+            local tool="$1" envv="$2" wf
+            wf="$(default_for "$tool")"
+            if [ "$wf" != "$envv" ]; then
+              echo "::error::$tool: check.yml default '$wf' != tools.env '$envv'"
+              fail=1
+            else
+              echo "$tool: $wf (agrees)"
+            fi
+          }
+          check fmt "$M1_FMT_VERSION"
+          check lint "$M1_LINT_VERSION"
+          check typecheck "$M1_TYPECHECK_VERSION"
+          exit "$fail"
+
+  # The local hooks must actually run the pinned binaries against the clean
+  # fixture and pass — proving the download+exec path works end to end.
+  self-test-hooks:
+    name: Self-test (local hooks pass)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run the m1-fmt / m1-lint / m1-typecheck hooks on the fixture
+        run: |
+          set -euo pipefail
+          find tests/fixture -name '*.m1scr' -print0 | xargs -0 ./hooks/m1-fmt
+          find tests/fixture -name '*.m1scr' -print0 | xargs -0 ./hooks/m1-lint
+          find tests/fixture -name '*.m1scr' -print0 | xargs -0 ./hooks/m1-typecheck
+
   # Dogfood: run the reusable workflow against the clean fixture project. It must
   # pass — proving the end-to-end install + fmt/lint/typecheck pipeline is green.
   self-test-pass:

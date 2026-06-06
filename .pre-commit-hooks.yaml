@@ -1,0 +1,33 @@
+# pre-commit hooks for M1 projects — the local half of m1-ci.
+#
+# Add to your project's .pre-commit-config.yaml, pinning the SAME m1-ci tag your
+# CI workflow uses so local and CI run an identical, frozen toolchain:
+#
+#   repos:
+#     - repo: https://github.com/C-Nucifora/m1-ci
+#       rev: v0.6.0
+#       hooks:
+#         - id: m1-fmt
+#         - id: m1-lint
+#         - id: m1-typecheck
+#
+# Each hook downloads (once, cached) the pinned tool binary named in tools.env —
+# the same version CI installs — so there is nothing to install by hand.
+- id: m1-fmt
+  name: m1-fmt (format check)
+  description: Check MoTeC M1 script formatting (m1-fmt --check).
+  entry: hooks/m1-fmt
+  language: script
+  files: \.m1scr$
+- id: m1-lint
+  name: m1-lint
+  description: Lint MoTeC M1 scripts (m1-lint).
+  entry: hooks/m1-lint
+  language: script
+  files: \.m1scr$
+- id: m1-typecheck
+  name: m1-typecheck
+  description: Type-check MoTeC M1 scripts (m1-typecheck).
+  entry: hooks/m1-typecheck
+  language: script
+  files: \.m1scr$

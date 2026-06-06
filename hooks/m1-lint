@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# pre-commit hook: m1-lint on the staged .m1scr files.
+set -euo pipefail
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+bin="$(ensure_tool m1-lint)"
+exec "$bin" "$@"
