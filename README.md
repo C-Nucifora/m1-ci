@@ -30,13 +30,19 @@ A ready-to-copy version lives in [`examples/check.yml`](examples/check.yml).
 ## What it runs
 
 The reusable [`check.yml`](.github/workflows/check.yml) installs the toolchain and
-runs it over every `.m1scr` it finds:
+runs it over every `.m1scr` it finds. Each check is its **own job**, so they run
+in parallel and report **independently** — a failing format check no longer skips
+the lint and type check. You get a separate ✓/✗ status on the PR for each:
 
-| Step | Tool | Fails the build when… |
-|------|------|-----------------------|
-| Format check | `m1-fmt --check` | a script is not canonically formatted |
-| Lint | `m1-lint` | an **error**-severity lint fires (or a syntax error) |
-| Type check | `m1-typecheck` | an **error**-severity type diagnostic fires |
+| Check (job) | Tool | Fails when… |
+|-------------|------|-------------|
+| Format check (m1-fmt) | `m1-fmt --check` | a script is not canonically formatted |
+| Lint (m1-lint) | `m1-lint` | an **error**-severity lint fires (or a syntax error) |
+| Type check (m1-typecheck) | `m1-typecheck` | an **error**-severity type diagnostic fires |
+
+Because the jobs are independent, a single PR can show e.g. *Format check ✗ /
+Lint ✓ / Type check ✗* at once — you see every problem in one run instead of
+fixing formatting just to discover the next failure.
 
 Set [`fail-on-warning`](#inputs) to also fail on warning-severity diagnostics
 (line length, complexity, `eq`-over-`==`, …), which otherwise only annotate.
@@ -62,7 +68,7 @@ workflow:
 ```yaml
 repos:
   - repo: https://github.com/C-Nucifora/m1-ci
-    rev: v0.6.0          # same tag as `uses: …@v0.6.0` in your workflow
+    rev: v0.7.0          # same tag as `uses: …@v0.7.0` in your workflow
     hooks:
       - id: m1-fmt
       - id: m1-lint
