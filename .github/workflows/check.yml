@@ -94,16 +94,15 @@ jobs:
       - name: Install m1-fmt
         env:
           GH_TOKEN: ${{ github.token }}
-          TOOL: m1-fmt
-          VERSION: ${{ inputs.fmt-version }}
+          FMT_VERSION: ${{ inputs.fmt-version }}
           TOOLS_VERSION: ${{ inputs.tools-version }}
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           target=x86_64-unknown-linux-gnu
-          tool="$TOOL"
-          version="$VERSION"
+          tool=m1-fmt
+          version="$FMT_VERSION"
           # Master override wins over the per-tool pin when set.
           [ -n "$TOOLS_VERSION" ] && version="$TOOLS_VERSION"
           repo="C-Nucifora/$tool"
@@ -196,16 +195,15 @@ jobs:
       - name: Install m1-lint
         env:
           GH_TOKEN: ${{ github.token }}
-          TOOL: m1-lint
-          VERSION: ${{ inputs.lint-version }}
+          LINT_VERSION: ${{ inputs.lint-version }}
           TOOLS_VERSION: ${{ inputs.tools-version }}
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           target=x86_64-unknown-linux-gnu
-          tool="$TOOL"
-          version="$VERSION"
+          tool=m1-lint
+          version="$LINT_VERSION"
           [ -n "$TOOLS_VERSION" ] && version="$TOOLS_VERSION"
           repo="C-Nucifora/$tool"
           asset="$tool-$target"
@@ -303,16 +301,15 @@ jobs:
       - name: Install m1-typecheck
         env:
           GH_TOKEN: ${{ github.token }}
-          TOOL: m1-typecheck
-          VERSION: ${{ inputs.typecheck-version }}
+          TYPECHECK_VERSION: ${{ inputs.typecheck-version }}
           TOOLS_VERSION: ${{ inputs.tools-version }}
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           target=x86_64-unknown-linux-gnu
-          tool="$TOOL"
-          version="$VERSION"
+          tool=m1-typecheck
+          version="$TYPECHECK_VERSION"
           [ -n "$TOOLS_VERSION" ] && version="$TOOLS_VERSION"
           repo="C-Nucifora/$tool"
           asset="$tool-$target"
