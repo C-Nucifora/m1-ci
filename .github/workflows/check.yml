@@ -39,9 +39,9 @@ on:
         type: string
         default: "v0.5.1"
       lint-version:
-        description: "m1-lint release to install: a tag like 'v0.8.1', or 'latest'."
+        description: "m1-lint release to install: a tag like 'v0.9.0', or 'latest'."
         type: string
-        default: "v0.8.1"
+        default: "v0.9.0"
       typecheck-version:
         description: "m1-typecheck release to install: a tag like 'v0.20.1', or 'latest'."
         type: string

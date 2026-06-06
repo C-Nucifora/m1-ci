@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# pre-commit hook: m1-typecheck on the staged .m1scr files. The Project.m1prj is
+# auto-discovered upward from each script (m1-typecheck's default).
+set -euo pipefail
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+bin="$(ensure_tool m1-typecheck)"
+exec "$bin" "$@"

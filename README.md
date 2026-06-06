@@ -52,6 +52,33 @@ are flagged by `m1-fmt`.
 Script names containing spaces (e.g. `CAN.Mission Critical Transcieve 500Hz.m1scr`)
 are handled correctly (NUL-delimited file lists).
 
+## Local checks (pre-commit)
+
+The same gates run locally as [pre-commit](https://pre-commit.com) hooks, so a
+developer's commit is checked with the **exact tools and versions CI uses**. Add
+to your project's `.pre-commit-config.yaml`, pinning the **same m1-ci tag** as your
+workflow:
+
+```yaml
+repos:
+  - repo: https://github.com/C-Nucifora/m1-ci
+    rev: v0.6.0          # same tag as `uses: …@v0.6.0` in your workflow
+    hooks:
+      - id: m1-fmt
+      - id: m1-lint
+      - id: m1-typecheck
+```
+
+Then `pre-commit install`. Each hook downloads (once, cached under
+`~/.cache/m1-ci`) the pinned tool binary named in [`tools.env`](tools.env) — the
+same version `check.yml` installs — so there is nothing to install by hand.
+Prebuilt binaries cover macOS (Apple Silicon), Windows, and Linux x86-64; other
+hosts build from source via `cargo` (the pinned tag).
+
+Because both halves read `tools.env` (CI enforces that `check.yml`'s defaults
+match it), **one m1-ci tag pins one toolchain for both local and CI** — they can't
+drift.
+
 ## How the tools are installed
 
 `check.yml` downloads the **prebuilt release binaries** published by each tool
@@ -72,9 +99,9 @@ override a single tool's `*-version`).
 |-------|---------|-------------|
 | `scripts-path` | `.` | Directory searched recursively for `.m1scr` files. |
 | `project-file` | `""` | `Project.m1prj` for symbol-aware type checking. Empty = `m1-typecheck` auto-discovers the nearest one upward from each script. |
-| `fmt-version` | `v0.4.1` | `m1-fmt` release to install: a tag, or `latest`. |
-| `lint-version` | `v0.5.1` | `m1-lint` release to install: a tag, or `latest`. |
-| `typecheck-version` | `v0.16.0` | `m1-typecheck` release to install: a tag, or `latest`. |
+| `fmt-version` | `v0.5.1` | `m1-fmt` release to install: a tag, or `latest`. |
+| `lint-version` | `v0.9.0` | `m1-lint` release to install: a tag, or `latest`. |
+| `typecheck-version` | `v0.20.1` | `m1-typecheck` release to install: a tag, or `latest`. |
 | `tools-version` | `""` | Master override (advanced). Empty = use the pinned per-tool versions above. `latest` = newest of every tool; a single tag forces all three (they are independently versioned). |
 | `run-fmt` | `true` | Run the formatter check. |
 | `run-lint` | `true` | Run the linter. |
