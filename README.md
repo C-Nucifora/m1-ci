@@ -105,9 +105,9 @@ override a single tool's `*-version`).
 |-------|---------|-------------|
 | `scripts-path` | `.` | Directory searched recursively for `.m1scr` files. |
 | `project-file` | `""` | `Project.m1prj` for symbol-aware type checking. Empty = `m1-typecheck` auto-discovers the nearest one upward from each script. |
-| `fmt-version` | `v0.5.1` | `m1-fmt` release to install: a tag, or `latest`. |
-| `lint-version` | `v0.9.0` | `m1-lint` release to install: a tag, or `latest`. |
-| `typecheck-version` | `v0.20.1` | `m1-typecheck` release to install: a tag, or `latest`. |
+| `fmt-version` | `v0.6.0` | `m1-fmt` release to install: a tag, or `latest`. |
+| `lint-version` | `v0.10.0` | `m1-lint` release to install: a tag, or `latest`. |
+| `typecheck-version` | `v0.24.0` | `m1-typecheck` release to install: a tag, or `latest`. |
 | `tools-version` | `""` | Master override (advanced). Empty = use the pinned per-tool versions above. `latest` = newest of every tool; a single tag forces all three (they are independently versioned). |
 | `run-fmt` | `true` | Run the formatter check. |
 | `run-lint` | `true` | Run the linter. |
