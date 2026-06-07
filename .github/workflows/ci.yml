@@ -24,6 +24,11 @@ jobs:
           # piping a script fetched from the repo's mutable `main` HEAD into bash
           # — a supply-chain risk if that script (or `main`) were ever tampered
           # with (#8).
+          # To bump: pick a release from
+          # https://github.com/rhysd/actionlint/releases, set VER, then
+          # regenerate SHA from that release's linux_amd64 tarball, e.g.:
+          #   curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${VER}/actionlint_${VER}_linux_amd64.tar.gz" | sha256sum
+          # (the official checksums are also in that release's checksums.txt).
           VER=1.7.7
           SHA=023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757
           curl -fsSL -o actionlint.tgz \
@@ -90,6 +95,10 @@ jobs:
       scripts-path: tests/fixture
       project-file: tests/fixture/Project.m1prj
       fail-on-warning: true
+      # Dogfood THIS commit's composite actions, not the released default tag —
+      # otherwise the self-test would validate the last release, not the PR.
+      m1-ci-repo: ${{ github.repository }}
+      m1-ci-ref: ${{ github.sha }}
 
   # The complement: a deliberately broken fixture must make the gate fail. We run
   # the linter directly and assert a non-zero exit, so a regression that silently
@@ -99,22 +108,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Install m1-lint
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Read pinned versions from tools.env
+        id: pins
         run: |
           set -euo pipefail
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          asset="m1-lint-x86_64-unknown-linux-gnu"
-          gh release download --repo C-Nucifora/m1-lint --pattern "$asset" \
-            --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
-          if [ -f "$RUNNER_TEMP/$asset" ]; then
-            mv "$RUNNER_TEMP/$asset" "$HOME/.local/bin/m1-lint"
-            chmod +x "$HOME/.local/bin/m1-lint"
-          else
-            cargo install --git https://github.com/C-Nucifora/m1-lint.git --root "$HOME/.local" m1-lint
-          fi
+          # shellcheck disable=SC1091
+          . ./tools.env
+          echo "lint-version=$M1_LINT_VERSION" >> "$GITHUB_OUTPUT"
+      # Install the SAME pinned m1-lint as check.yml / the hooks (from tools.env),
+      # with the same attestation check — not "latest" unpinned-and-untrusted —
+      # so this negative self-test exercises the real release we ship.
+      - name: Install m1-lint
+        uses: ./.github/actions/install-m1-tool
+        with:
+          tool: m1-lint
+          version: ${{ steps.pins.outputs.lint-version }}
+          github-token: ${{ github.token }}
       - name: Assert the broken fixture is rejected
         run: |
           set -uo pipefail

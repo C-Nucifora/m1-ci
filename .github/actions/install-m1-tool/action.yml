@@ -1,0 +1,86 @@
+name: Install an M1 tool
+description: >
+  Install one C-Nucifora M1 tool (m1-fmt / m1-lint / m1-typecheck) from its
+  prebuilt release binary, verifying GitHub-native build provenance before
+  trusting it; falls back to building from source when no release asset exists.
+  The installed binary is placed on PATH at $HOME/.local/bin.
+
+# Shared by every install step in check.yml so the download + attestation +
+# source-fallback logic lives in exactly one place. See check.yml for why the
+# reusable workflow checks this repo out before `uses:`-ing this action.
+
+inputs:
+  tool:
+    description: "Tool/crate name, e.g. m1-fmt, m1-lint, m1-typecheck."
+    required: true
+  version:
+    description: "Release tag to install (e.g. 'v0.6.0'), or 'latest'."
+    required: true
+  tools-version:
+    description: >
+      Master override. Empty (default) uses `version`. When non-empty it wins
+      over `version` for every tool — set to 'latest' or a single tag.
+    required: false
+    default: ""
+  repo:
+    description: "owner/name of the tool repo to download releases from."
+    required: false
+    default: ""
+  github-token:
+    description: "Token for `gh release download` / `gh attestation verify`."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install ${{ inputs.tool }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        TOOL: ${{ inputs.tool }}
+        TOOL_VERSION: ${{ inputs.version }}
+        TOOLS_VERSION: ${{ inputs.tools-version }}
+        TOOL_REPO: ${{ inputs.repo }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/.local/bin"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        target=x86_64-unknown-linux-gnu
+        tool="$TOOL"
+        version="$TOOL_VERSION"
+        # Master override wins over the per-tool pin when set.
+        [ -n "$TOOLS_VERSION" ] && version="$TOOLS_VERSION"
+        repo="${TOOL_REPO:-C-Nucifora/$tool}"
+        asset="$tool-$target"
+        dest="$HOME/.local/bin/$tool"
+        echo "::group::Install $tool ($version)"
+        rm -f "$RUNNER_TEMP/$asset"
+        if [ "$version" = latest ]; then
+          gh release download --repo "$repo" --pattern "$asset" \
+            --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
+        else
+          gh release download "$version" --repo "$repo" --pattern "$asset" \
+            --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
+        fi
+        if [ -f "$RUNNER_TEMP/$asset" ]; then
+          # Verify GitHub-native build provenance before trusting the binary
+          # we are about to chmod +x and run on the caller's source (#7). A
+          # release that predates attestation has none yet, so warn and proceed.
+          if gh attestation verify "$RUNNER_TEMP/$asset" --repo "$repo" >/dev/null 2>&1; then
+            echo "Verified build provenance for $tool $version."
+          else
+            echo "::warning::no verifiable build provenance for $tool $version (release predates attestation); proceeding."
+          fi
+          mv "$RUNNER_TEMP/$asset" "$dest"
+          chmod +x "$dest"
+          echo "Installed $tool $version from a release binary."
+        else
+          echo "No release asset for $tool ($version); building from source."
+          if [ "$version" = latest ]; then
+            cargo install --git "https://github.com/$repo.git" --root "$HOME/.local" "$tool"
+          else
+            cargo install --git "https://github.com/$repo.git" --tag "$version" --root "$HOME/.local" "$tool"
+          fi
+        fi
+        "$dest" --help >/dev/null 2>&1 || true
+        echo "::endgroup::"

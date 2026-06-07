@@ -1,0 +1,39 @@
+name: Collect M1 scripts
+description: >
+  Recursively find every .m1scr under a path, NUL-delimited so names with
+  spaces are handled safely, and expose the count as an output so downstream
+  steps can skip cleanly (and warn) when there is nothing to check.
+
+# Shared by the fmt / lint / typecheck jobs in check.yml so the find + count
+# logic lives in one place. Writes the NUL-delimited list to
+# $RUNNER_TEMP/m1-scripts.nul for the per-tool steps to consume via xargs -0.
+
+inputs:
+  scripts-path:
+    description: "Directory searched recursively for .m1scr scripts."
+    required: true
+
+outputs:
+  count:
+    description: "Number of .m1scr files found under scripts-path."
+    value: ${{ steps.collect.outputs.count }}
+
+runs:
+  using: composite
+  steps:
+    - name: Collect scripts
+      id: collect
+      shell: bash
+      env:
+        SCRIPTS_PATH: ${{ inputs.scripts-path }}
+      run: |
+        set -euo pipefail
+        # NUL-delimited so script names containing spaces are handled safely.
+        find "$SCRIPTS_PATH" -type f -name '*.m1scr' -print0 > "$RUNNER_TEMP/m1-scripts.nul"
+        # Count -print0 records by their NUL terminators (robust for names with spaces/newlines).
+        count=$(tr -dc '\0' < "$RUNNER_TEMP/m1-scripts.nul" | wc -c | tr -d ' ')
+        echo "count=$count" >> "$GITHUB_OUTPUT"
+        echo "Found $count .m1scr file(s) under '$SCRIPTS_PATH'."
+        if [ "$count" -eq 0 ]; then
+          echo "::warning::no .m1scr scripts found under '$SCRIPTS_PATH'"
+        fi
