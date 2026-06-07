@@ -12,8 +12,9 @@ jobs:
   check:
     # Pin m1-ci to a release tag, not @main — the tag freezes the M1 toolchain
     # versions this workflow installs, so a new (stricter) tool release can't
-    # break your CI without you bumping this tag deliberately.
-    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.2.0
+    # break your CI without you bumping this tag deliberately. Keep this in step
+    # with the latest m1-ci release: https://github.com/C-Nucifora/m1-ci/releases
+    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.9.0
     with:
       # Directory holding your scripts (searched recursively).
       scripts-path: UQR-EV/01.00/Scripts
@@ -27,6 +28,8 @@ jobs:
       # lint-version: v0.5.1
       # typecheck-version: v0.16.0
       # tools-version: latest   # master override: track newest of every tool
+      # m1-ci-ref / m1-ci-repo: only needed if you fork m1-ci or pin the
+      #   workflow at a different tag than its composite-action default.
       # fail-on-warning: false  # true = warnings fail the build too
       # run-fmt: true
       # run-lint: true

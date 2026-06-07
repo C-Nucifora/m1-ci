@@ -56,6 +56,21 @@ on:
         description: "Master override (advanced). Empty (default) uses the pinned per-tool versions above. Set to 'latest' to track the newest release of every tool; a single tag forces all three (the tools are independently versioned, so a shared tag may not exist for all)."
         type: string
         default: ""
+      m1-ci-ref:
+        description: >
+          Ref of C-Nucifora/m1-ci to load this workflow's composite actions
+          (install-m1-tool, collect-scripts) from. A reusable workflow's
+          local `uses: ./…` paths resolve against the CALLER's checkout, not
+          m1-ci's, so each job checks m1-ci out at this ref first. Defaults to
+          the tag matching this m1-ci release; pin it to the same tag you pin
+          the workflow at (e.g. checkout@v0.9.0 → m1-ci-ref: v0.9.0). Forks can
+          point this at their own fork via m1-ci-repo.
+        type: string
+        default: "v0.9.0"
+      m1-ci-repo:
+        description: "Repo to load the composite actions from. Override for forks."
+        type: string
+        default: "C-Nucifora/m1-ci"
       run-fmt:
         description: "Run m1-fmt --check."
         type: boolean
@@ -91,54 +106,23 @@ jobs:
       - name: Check out the project
         uses: actions/checkout@v6
 
+      # A reusable workflow's local `uses: ./…` paths resolve against the
+      # caller's checkout, not m1-ci's, so we check m1-ci out into a sibling
+      # path to load its composite actions (install-m1-tool, collect-scripts).
+      - name: Check out m1-ci (for composite actions)
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.m1-ci-repo }}
+          ref: ${{ inputs.m1-ci-ref }}
+          path: .m1-ci
+
       - name: Install m1-fmt
-        env:
-          GH_TOKEN: ${{ github.token }}
-          FMT_VERSION: ${{ inputs.fmt-version }}
-          TOOLS_VERSION: ${{ inputs.tools-version }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          target=x86_64-unknown-linux-gnu
-          tool=m1-fmt
-          version="$FMT_VERSION"
-          # Master override wins over the per-tool pin when set.
-          [ -n "$TOOLS_VERSION" ] && version="$TOOLS_VERSION"
-          repo="C-Nucifora/$tool"
-          asset="$tool-$target"
-          dest="$HOME/.local/bin/$tool"
-          echo "::group::Install $tool ($version)"
-          rm -f "$RUNNER_TEMP/$asset"
-          if [ "$version" = latest ]; then
-            gh release download --repo "$repo" --pattern "$asset" \
-              --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
-          else
-            gh release download "$version" --repo "$repo" --pattern "$asset" \
-              --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
-          fi
-          if [ -f "$RUNNER_TEMP/$asset" ]; then
-            # Verify GitHub-native build provenance before trusting the binary
-            # we are about to chmod +x and run on the caller's source (#7). A
-            # release that predates attestation has none yet, so warn and proceed.
-            if gh attestation verify "$RUNNER_TEMP/$asset" --repo "$repo" >/dev/null 2>&1; then
-              echo "Verified build provenance for $tool $version."
-            else
-              echo "::warning::no verifiable build provenance for $tool $version (release predates attestation); proceeding."
-            fi
-            mv "$RUNNER_TEMP/$asset" "$dest"
-            chmod +x "$dest"
-            echo "Installed $tool $version from a release binary."
-          else
-            echo "No release asset for $tool ($version); building from source."
-            if [ "$version" = latest ]; then
-              cargo install --git "https://github.com/$repo.git" --root "$HOME/.local" "$tool"
-            else
-              cargo install --git "https://github.com/$repo.git" --tag "$version" --root "$HOME/.local" "$tool"
-            fi
-          fi
-          "$dest" --help >/dev/null 2>&1 || true
-          echo "::endgroup::"
+        uses: ./.m1-ci/.github/actions/install-m1-tool
+        with:
+          tool: m1-fmt
+          version: ${{ inputs.fmt-version }}
+          tools-version: ${{ inputs.tools-version }}
+          github-token: ${{ github.token }}
 
       - name: Register problem matchers
         run: |
@@ -166,19 +150,9 @@ jobs:
 
       - name: Collect scripts
         id: collect
-        env:
-          SCRIPTS_PATH: ${{ inputs.scripts-path }}
-        run: |
-          set -euo pipefail
-          # NUL-delimited so script names containing spaces are handled safely.
-          find "$SCRIPTS_PATH" -type f -name '*.m1scr' -print0 > "$RUNNER_TEMP/m1-scripts.nul"
-          # Count -print0 records by their NUL terminators (robust for names with spaces/newlines).
-          count=$(tr -dc '\0' < "$RUNNER_TEMP/m1-scripts.nul" | wc -c | tr -d ' ')
-          echo "count=$count" >> "$GITHUB_OUTPUT"
-          echo "Found $count .m1scr file(s) under '$SCRIPTS_PATH'."
-          if [ "$count" -eq 0 ]; then
-            echo "::warning::no .m1scr scripts found under '$SCRIPTS_PATH'"
-          fi
+        uses: ./.m1-ci/.github/actions/collect-scripts
+        with:
+          scripts-path: ${{ inputs.scripts-path }}
 
       - name: Format check (m1-fmt --check)
         if: steps.collect.outputs.count != '0'
@@ -192,50 +166,22 @@ jobs:
       - name: Check out the project
         uses: actions/checkout@v6
 
+      # See the fmt job: m1-ci's composite actions aren't in the caller's
+      # checkout, so load them from m1-ci at the pinned ref.
+      - name: Check out m1-ci (for composite actions)
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.m1-ci-repo }}
+          ref: ${{ inputs.m1-ci-ref }}
+          path: .m1-ci
+
       - name: Install m1-lint
-        env:
-          GH_TOKEN: ${{ github.token }}
-          LINT_VERSION: ${{ inputs.lint-version }}
-          TOOLS_VERSION: ${{ inputs.tools-version }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          target=x86_64-unknown-linux-gnu
-          tool=m1-lint
-          version="$LINT_VERSION"
-          [ -n "$TOOLS_VERSION" ] && version="$TOOLS_VERSION"
-          repo="C-Nucifora/$tool"
-          asset="$tool-$target"
-          dest="$HOME/.local/bin/$tool"
-          echo "::group::Install $tool ($version)"
-          rm -f "$RUNNER_TEMP/$asset"
-          if [ "$version" = latest ]; then
-            gh release download --repo "$repo" --pattern "$asset" \
-              --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
-          else
-            gh release download "$version" --repo "$repo" --pattern "$asset" \
-              --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
-          fi
-          if [ -f "$RUNNER_TEMP/$asset" ]; then
-            if gh attestation verify "$RUNNER_TEMP/$asset" --repo "$repo" >/dev/null 2>&1; then
-              echo "Verified build provenance for $tool $version."
-            else
-              echo "::warning::no verifiable build provenance for $tool $version (release predates attestation); proceeding."
-            fi
-            mv "$RUNNER_TEMP/$asset" "$dest"
-            chmod +x "$dest"
-            echo "Installed $tool $version from a release binary."
-          else
-            echo "No release asset for $tool ($version); building from source."
-            if [ "$version" = latest ]; then
-              cargo install --git "https://github.com/$repo.git" --root "$HOME/.local" "$tool"
-            else
-              cargo install --git "https://github.com/$repo.git" --tag "$version" --root "$HOME/.local" "$tool"
-            fi
-          fi
-          "$dest" --help >/dev/null 2>&1 || true
-          echo "::endgroup::"
+        uses: ./.m1-ci/.github/actions/install-m1-tool
+        with:
+          tool: m1-lint
+          version: ${{ inputs.lint-version }}
+          tools-version: ${{ inputs.tools-version }}
+          github-token: ${{ github.token }}
 
       - name: Register problem matchers
         run: |
@@ -264,23 +210,19 @@ jobs:
 
       - name: Collect scripts
         id: collect
-        env:
-          SCRIPTS_PATH: ${{ inputs.scripts-path }}
-        run: |
-          set -euo pipefail
-          find "$SCRIPTS_PATH" -type f -name '*.m1scr' -print0 > "$RUNNER_TEMP/m1-scripts.nul"
-          count=$(tr -dc '\0' < "$RUNNER_TEMP/m1-scripts.nul" | wc -c | tr -d ' ')
-          echo "count=$count" >> "$GITHUB_OUTPUT"
-          echo "Found $count .m1scr file(s) under '$SCRIPTS_PATH'."
-          if [ "$count" -eq 0 ]; then
-            echo "::warning::no .m1scr scripts found under '$SCRIPTS_PATH'"
-          fi
+        uses: ./.m1-ci/.github/actions/collect-scripts
+        with:
+          scripts-path: ${{ inputs.scripts-path }}
 
       - name: Lint (m1-lint)
         if: steps.collect.outputs.count != '0'
         env:
           FAIL_ON_WARNING: ${{ inputs.fail-on-warning }}
         run: |
+          # Intentionally `set -uo pipefail` WITHOUT `-e`: m1-lint exits non-zero
+          # on findings and that flows through the pipe; we read its status from
+          # PIPESTATUS below and decide the outcome ourselves, so `-e` must not
+          # abort the step before that logic runs.
           set -uo pipefail
           xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-lint | tee "$RUNNER_TEMP/m1-lint.out"
           code=${PIPESTATUS[0]}
@@ -298,50 +240,22 @@ jobs:
       - name: Check out the project
         uses: actions/checkout@v6
 
+      # See the fmt job: m1-ci's composite actions aren't in the caller's
+      # checkout, so load them from m1-ci at the pinned ref.
+      - name: Check out m1-ci (for composite actions)
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.m1-ci-repo }}
+          ref: ${{ inputs.m1-ci-ref }}
+          path: .m1-ci
+
       - name: Install m1-typecheck
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TYPECHECK_VERSION: ${{ inputs.typecheck-version }}
-          TOOLS_VERSION: ${{ inputs.tools-version }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          target=x86_64-unknown-linux-gnu
-          tool=m1-typecheck
-          version="$TYPECHECK_VERSION"
-          [ -n "$TOOLS_VERSION" ] && version="$TOOLS_VERSION"
-          repo="C-Nucifora/$tool"
-          asset="$tool-$target"
-          dest="$HOME/.local/bin/$tool"
-          echo "::group::Install $tool ($version)"
-          rm -f "$RUNNER_TEMP/$asset"
-          if [ "$version" = latest ]; then
-            gh release download --repo "$repo" --pattern "$asset" \
-              --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
-          else
-            gh release download "$version" --repo "$repo" --pattern "$asset" \
-              --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
-          fi
-          if [ -f "$RUNNER_TEMP/$asset" ]; then
-            if gh attestation verify "$RUNNER_TEMP/$asset" --repo "$repo" >/dev/null 2>&1; then
-              echo "Verified build provenance for $tool $version."
-            else
-              echo "::warning::no verifiable build provenance for $tool $version (release predates attestation); proceeding."
-            fi
-            mv "$RUNNER_TEMP/$asset" "$dest"
-            chmod +x "$dest"
-            echo "Installed $tool $version from a release binary."
-          else
-            echo "No release asset for $tool ($version); building from source."
-            if [ "$version" = latest ]; then
-              cargo install --git "https://github.com/$repo.git" --root "$HOME/.local" "$tool"
-            else
-              cargo install --git "https://github.com/$repo.git" --tag "$version" --root "$HOME/.local" "$tool"
-            fi
-          fi
-          "$dest" --help >/dev/null 2>&1 || true
-          echo "::endgroup::"
+        uses: ./.m1-ci/.github/actions/install-m1-tool
+        with:
+          tool: m1-typecheck
+          version: ${{ inputs.typecheck-version }}
+          tools-version: ${{ inputs.tools-version }}
+          github-token: ${{ github.token }}
 
       - name: Register problem matchers
         run: |
@@ -370,17 +284,9 @@ jobs:
 
       - name: Collect scripts
         id: collect
-        env:
-          SCRIPTS_PATH: ${{ inputs.scripts-path }}
-        run: |
-          set -euo pipefail
-          find "$SCRIPTS_PATH" -type f -name '*.m1scr' -print0 > "$RUNNER_TEMP/m1-scripts.nul"
-          count=$(tr -dc '\0' < "$RUNNER_TEMP/m1-scripts.nul" | wc -c | tr -d ' ')
-          echo "count=$count" >> "$GITHUB_OUTPUT"
-          echo "Found $count .m1scr file(s) under '$SCRIPTS_PATH'."
-          if [ "$count" -eq 0 ]; then
-            echo "::warning::no .m1scr scripts found under '$SCRIPTS_PATH'"
-          fi
+        uses: ./.m1-ci/.github/actions/collect-scripts
+        with:
+          scripts-path: ${{ inputs.scripts-path }}
 
       - name: Type check (m1-typecheck)
         if: steps.collect.outputs.count != '0'
@@ -388,6 +294,10 @@ jobs:
           PROJECT_FILE: ${{ inputs.project-file }}
           FAIL_ON_WARNING: ${{ inputs.fail-on-warning }}
         run: |
+          # Intentionally `set -uo pipefail` WITHOUT `-e`: m1-typecheck exits
+          # non-zero on findings and that flows through the pipe; we read its
+          # status from PIPESTATUS below and decide the outcome ourselves, so
+          # `-e` must not abort the step before that logic runs.
           set -uo pipefail
           proj=()
           if [ -n "$PROJECT_FILE" ]; then
