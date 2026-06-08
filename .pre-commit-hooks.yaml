@@ -5,7 +5,7 @@
 #
 #   repos:
 #     - repo: https://github.com/C-Nucifora/m1-ci
-#       rev: v0.6.0
+#       rev: v0.9.2
 #       hooks:
 #         - id: m1-fmt
 #         - id: m1-lint

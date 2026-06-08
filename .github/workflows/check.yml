@@ -41,17 +41,17 @@ on:
       #
       # These defaults MUST match tools.env — ci.yml's tools-pins job enforces it.
       fmt-version:
-        description: "m1-fmt release to install: a tag like 'v0.6.0', or 'latest'."
+        description: "m1-fmt release to install: a tag like 'v0.8.2', or 'latest'."
         type: string
-        default: "v0.6.0"
+        default: "v0.8.2"
       lint-version:
-        description: "m1-lint release to install: a tag like 'v0.10.0', or 'latest'."
+        description: "m1-lint release to install: a tag like 'v0.12.2', or 'latest'."
         type: string
-        default: "v0.10.0"
+        default: "v0.12.2"
       typecheck-version:
-        description: "m1-typecheck release to install: a tag like 'v0.24.0', or 'latest'."
+        description: "m1-typecheck release to install: a tag like 'v0.25.5', or 'latest'."
         type: string
-        default: "v0.24.0"
+        default: "v0.25.5"
       tools-version:
         description: "Master override (advanced). Empty (default) uses the pinned per-tool versions above. Set to 'latest' to track the newest release of every tool; a single tag forces all three (the tools are independently versioned, so a shared tag may not exist for all)."
         type: string
@@ -69,7 +69,7 @@ on:
           This default MUST equal `v$(cat VERSION)` — ci.yml's ci-ref-pin job
           enforces it, so the self-resolving ref cannot drift from the release.
         type: string
-        default: "v0.9.1"
+        default: "v0.9.2"
       m1-ci-repo:
         description: "Repo to load the composite actions from. Override for forks."
         type: string
