@@ -65,6 +65,9 @@ on:
           the tag matching this m1-ci release; pin it to the same tag you pin
           the workflow at (e.g. checkout@v0.9.0 → m1-ci-ref: v0.9.0). Forks can
           point this at their own fork via m1-ci-repo.
+
+          This default MUST equal `v$(cat VERSION)` — ci.yml's ci-ref-pin job
+          enforces it, so the self-resolving ref cannot drift from the release.
         type: string
         default: "v0.9.0"
       m1-ci-repo:
