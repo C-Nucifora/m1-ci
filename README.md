@@ -130,6 +130,12 @@ cuts the matching `vX.Y.Z` tag + GitHub Release (with generated notes) if one
 doesn't already exist. The job is idempotent — re-running it for an existing
 version is a no-op — and can also be triggered manually from the Actions tab.
 
+When you bump `VERSION`, also bump the `m1-ci-ref` input default in
+[`check.yml`](.github/workflows/check.yml) and the pinned tag in
+[`examples/check.yml`](examples/check.yml) to the matching `vX.Y.Z`. CI's
+`ci-ref-pin` job enforces this — it fails if either drifts from `v$(cat
+VERSION)` — so the ref m1-ci checks itself out at can never lag the release.
+
 ## License
 
 GPL-3.0 — see [LICENSE](LICENSE).

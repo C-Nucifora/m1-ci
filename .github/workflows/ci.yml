@@ -72,6 +72,57 @@ jobs:
           check typecheck "$M1_TYPECHECK_VERSION"
           exit "$fail"
 
+  # The `m1-ci-ref` input default in check.yml is the tag at which a consuming
+  # reusable-workflow run checks m1-ci out to resolve its composite actions. It
+  # is a manual touchpoint that must be bumped to the new tag on every release
+  # (alongside VERSION). VERSION is the single source of truth for the release
+  # tag (release.yml cuts `v$VERSION`); assert the m1-ci-ref default — and the
+  # example pin in examples/check.yml — agree with it, so the self-resolving ref
+  # can never silently drift from the version we actually ship.
+  ci-ref-pin:
+    name: m1-ci-ref default matches VERSION
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Assert m1-ci-ref default == v$(cat VERSION)
+        run: |
+          set -euo pipefail
+          want="v$(tr -d ' \t\n\r' < VERSION)"
+          fail=0
+          assert() {
+            local what="$1" got="$2"
+            if [ "$got" != "$want" ]; then
+              echo "::error::$what is '$got' but VERSION implies '$want' — bump it on release"
+              fail=1
+            else
+              echo "$what: $got (matches VERSION)"
+            fi
+          }
+
+          # check.yml: the m1-ci-ref input default. Read the `default:` line that
+          # follows the `m1-ci-ref:` input key (same awk shape as tools-pins).
+          ref_default="$(awk '
+            $1 == "m1-ci-ref:" { found = 1 }
+            found && $1 == "default:" { gsub(/"/, "", $2); print $2; exit }
+          ' .github/workflows/check.yml)"
+          if [ -z "$ref_default" ]; then
+            echo "::error::could not find the m1-ci-ref default in check.yml"
+            exit 1
+          fi
+          assert "check.yml m1-ci-ref default" "$ref_default"
+
+          # examples/check.yml: the documented pin (`...@vX.Y.Z`) consumers copy.
+          # Extract the tag the example pins the reusable workflow at.
+          example_pin="$(grep -oE 'm1-ci/\.github/workflows/check\.yml@v[0-9]+\.[0-9]+\.[0-9]+' \
+            examples/check.yml | sed 's/.*@//' | head -n1)"
+          if [ -z "$example_pin" ]; then
+            echo "::error::could not find the pinned check.yml tag in examples/check.yml"
+            exit 1
+          fi
+          assert "examples/check.yml pin" "$example_pin"
+
+          exit "$fail"
+
   # The local hooks must actually run the pinned binaries against the clean
   # fixture and pass — proving the download+exec path works end to end.
   self-test-hooks:
