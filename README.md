@@ -19,7 +19,7 @@ on:
 
 jobs:
   check:
-    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.2.0
+    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.9.2
     with:
       scripts-path: UQR-EV/01.00/Scripts
       project-file: UQR-EV/01.00/Project.m1prj
@@ -105,9 +105,9 @@ override a single tool's `*-version`).
 |-------|---------|-------------|
 | `scripts-path` | `.` | Directory searched recursively for `.m1scr` files. |
 | `project-file` | `""` | `Project.m1prj` for symbol-aware type checking. Empty = `m1-typecheck` auto-discovers the nearest one upward from each script. |
-| `fmt-version` | `v0.6.0` | `m1-fmt` release to install: a tag, or `latest`. |
-| `lint-version` | `v0.10.0` | `m1-lint` release to install: a tag, or `latest`. |
-| `typecheck-version` | `v0.24.0` | `m1-typecheck` release to install: a tag, or `latest`. |
+| `fmt-version` | `v0.8.2` | `m1-fmt` release to install: a tag, or `latest`. |
+| `lint-version` | `v0.12.2` | `m1-lint` release to install: a tag, or `latest`. |
+| `typecheck-version` | `v0.25.5` | `m1-typecheck` release to install: a tag, or `latest`. |
 | `tools-version` | `""` | Master override (advanced). Empty = use the pinned per-tool versions above. `latest` = newest of every tool; a single tag forces all three (they are independently versioned). |
 | `run-fmt` | `true` | Run the formatter check. |
 | `run-lint` | `true` | Run the linter. |
@@ -119,7 +119,7 @@ override a single tool's `*-version`).
 `@main` always tracks the latest workflow **and** the newest pinned tool defaults
 on `main`. For reproducible CI, pin to a tag — the tag freezes both the workflow
 and the M1 toolchain versions it installs, e.g.
-`uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.2.0`. Bump the tag
+`uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.9.2`. Bump the tag
 deliberately when you want the newer toolchain.
 
 ## Releasing
