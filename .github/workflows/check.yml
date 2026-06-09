@@ -32,6 +32,15 @@ on:
         description: "Path to Project.m1prj for symbol-aware type checking. Empty = auto-discover upward from each script."
         type: string
         default: ""
+      changed-files-only:
+        description: >
+          On pull_request events, run m1-fmt and m1-lint only on the .m1scr
+          files changed vs the PR base (faster, tighter feedback). The type
+          check always sees the full tree — its cross-script analysis needs
+          the whole project. Falls back to the full tree when the base can't
+          be diffed.
+        type: boolean
+        default: false
       # Per-tool version pins. These default to specific release tags so that a
       # given m1-ci tag installs a frozen, reproducible toolchain — pinning
       # `m1-ci@vX.Y.Z` means your CI keeps working even as the tools release new
@@ -43,15 +52,15 @@ on:
       fmt-version:
         description: "m1-fmt release to install: a tag like 'v0.8.2', or 'latest'."
         type: string
-        default: "v0.8.2"
+        default: "v0.9.0"
       lint-version:
         description: "m1-lint release to install: a tag like 'v0.12.2', or 'latest'."
         type: string
-        default: "v0.12.2"
+        default: "v0.13.0"
       typecheck-version:
         description: "m1-typecheck release to install: a tag like 'v0.26.0', or 'latest'."
         type: string
-        default: "v0.26.0"
+        default: "v0.28.0"
       tools-version:
         description: "Master override (advanced). Empty (default) uses the pinned per-tool versions above. Set to 'latest' to track the newest release of every tool; a single tag forces all three (the tools are independently versioned, so a shared tag may not exist for all)."
         type: string
@@ -69,7 +78,7 @@ on:
           This default MUST equal `v$(cat VERSION)` — ci.yml's ci-ref-pin job
           enforces it, so the self-resolving ref cannot drift from the release.
         type: string
-        default: "v0.9.3"
+        default: "v0.10.0"
       m1-ci-repo:
         description: "Repo to load the composite actions from. Override for forks."
         type: string
@@ -156,6 +165,7 @@ jobs:
         uses: ./.m1-ci/.github/actions/collect-scripts
         with:
           scripts-path: ${{ inputs.scripts-path }}
+          changed-only: ${{ inputs.changed-files-only }}
 
       - name: Format check (m1-fmt --check)
         if: steps.collect.outputs.count != '0'
@@ -216,6 +226,7 @@ jobs:
         uses: ./.m1-ci/.github/actions/collect-scripts
         with:
           scripts-path: ${{ inputs.scripts-path }}
+          changed-only: ${{ inputs.changed-files-only }}
 
       - name: Lint (m1-lint)
         if: steps.collect.outputs.count != '0'

@@ -33,7 +33,8 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install ${{ inputs.tool }}
+    - name: Install ${{ inputs.tool }} (prebuilt)
+      id: prebuilt
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
@@ -62,6 +63,7 @@ runs:
           gh release download "$version" --repo "$repo" --pattern "$asset" \
             --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
         fi
+        need_source=false
         if [ -f "$RUNNER_TEMP/$asset" ]; then
           # Verify GitHub-native build provenance before trusting the binary
           # we are about to chmod +x and run on the caller's source (#7). A
@@ -76,11 +78,36 @@ runs:
           echo "Installed $tool $version from a release binary."
         else
           echo "No release asset for $tool ($version); building from source."
-          if [ "$version" = latest ]; then
-            cargo install --git "https://github.com/$repo.git" --root "$HOME/.local" "$tool"
-          else
-            cargo install --git "https://github.com/$repo.git" --tag "$version" --root "$HOME/.local" "$tool"
-          fi
+          need_source=true
         fi
-        "$dest" --help >/dev/null 2>&1 || true
+        echo "need-source=$need_source" >> "$GITHUB_OUTPUT"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "repo=$repo" >> "$GITHUB_OUTPUT"
         echo "::endgroup::"
+
+    # Source-fallback path only (#24): cache the Cargo registry + git DBs so a
+    # platform/tag with no prebuilt asset doesn't recompile the world each run.
+    - name: Cache cargo (source fallback)
+      if: steps.prebuilt.outputs.need-source == 'true'
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: m1-ci-${{ inputs.tool }}-${{ steps.prebuilt.outputs.version }}
+        cache-targets: false
+
+    - name: Build ${{ inputs.tool }} from source
+      if: steps.prebuilt.outputs.need-source == 'true'
+      shell: bash
+      env:
+        TOOL: ${{ inputs.tool }}
+        BUILD_VERSION: ${{ steps.prebuilt.outputs.version }}
+        BUILD_REPO: ${{ steps.prebuilt.outputs.repo }}
+      run: |
+        set -euo pipefail
+        # --locked (#23): build exactly the dependency set the tag's Cargo.lock
+        # pins, instead of whatever resolves freshest at run time.
+        if [ "$BUILD_VERSION" = latest ]; then
+          cargo install --locked --git "https://github.com/$BUILD_REPO.git" --root "$HOME/.local" "$TOOL"
+        else
+          cargo install --locked --git "https://github.com/$BUILD_REPO.git" --tag "$BUILD_VERSION" --root "$HOME/.local" "$TOOL"
+        fi
+        "$HOME/.local/bin/$TOOL" --help >/dev/null 2>&1 || true
