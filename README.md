@@ -19,7 +19,7 @@ on:
 
 jobs:
   check:
-    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.9.2
+    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.9.3
     with:
       scripts-path: UQR-EV/01.00/Scripts
       project-file: UQR-EV/01.00/Project.m1prj
@@ -119,7 +119,7 @@ override a single tool's `*-version`).
 `@main` always tracks the latest workflow **and** the newest pinned tool defaults
 on `main`. For reproducible CI, pin to a tag — the tag freezes both the workflow
 and the M1 toolchain versions it installs, e.g.
-`uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.9.2`. Bump the tag
+`uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.9.3`. Bump the tag
 deliberately when you want the newer toolchain.
 
 ## Releasing
