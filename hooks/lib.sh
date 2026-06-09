@@ -79,6 +79,16 @@ ensure_tool() {
     url="https://github.com/C-Nucifora/${tool}/releases/download/${version}/${asset}"
     echo "m1-ci hook: fetching ${tool} ${version} ($suffix)…" >&2
     if curl -fsSL -o "$dest.tmp" "$url"; then
+      # Verify GitHub-native build provenance when gh is available and
+      # authenticated (mirrors the CI install action); degrade gracefully —
+      # a release predating attestation, or no gh, only warns (#23).
+      if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        if gh attestation verify "$dest.tmp" --repo "C-Nucifora/${tool}" >/dev/null 2>&1; then
+          echo "m1-ci hook: verified build provenance for ${tool} ${version}." >&2
+        else
+          echo "m1-ci hook: warning: no verifiable build provenance for ${tool} ${version}; proceeding." >&2
+        fi
+      fi
       chmod +x "$dest.tmp"
       mv "$dest.tmp" "$dest"
       printf '%s\n' "$dest"
@@ -95,7 +105,7 @@ ensure_tool() {
     echo "m1-ci hook: cannot install ${tool}: no prebuilt binary and cargo is not available." >&2
     exit 1
   fi
-  cargo install --git "https://github.com/C-Nucifora/${tool}.git" --tag "$version" \
+  cargo install --locked --git "https://github.com/C-Nucifora/${tool}.git" --tag "$version" \
     --root "$CACHE_DIR/cargo-${tool}-${version}" "$tool" >&2
   cp "$CACHE_DIR/cargo-${tool}-${version}/bin/${tool}${ext}" "$dest"
   printf '%s\n' "$dest"

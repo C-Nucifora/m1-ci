@@ -12,6 +12,13 @@ inputs:
   scripts-path:
     description: "Directory searched recursively for .m1scr scripts."
     required: true
+  changed-only:
+    description: >
+      On pull_request events, restrict the list to .m1scr files changed vs the
+      PR base (added/copied/modified/renamed). Falls back to the full tree on
+      non-PR events or when the base can't be fetched.
+    required: false
+    default: "false"
 
 outputs:
   count:
@@ -26,10 +33,23 @@ runs:
       shell: bash
       env:
         SCRIPTS_PATH: ${{ inputs.scripts-path }}
+        CHANGED_ONLY: ${{ inputs.changed-only }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set -euo pipefail
         # NUL-delimited so script names containing spaces are handled safely.
         find "$SCRIPTS_PATH" -type f -name '*.m1scr' -print0 > "$RUNNER_TEMP/m1-scripts.nul"
+        # changed-only (#22): on a PR, intersect with the files changed vs the
+        # base. Any failure (shallow clone, missing base) keeps the full list —
+        # never silently check less than asked without a reason on the log.
+        if [ "$CHANGED_ONLY" = "true" ] && [ -n "${BASE_SHA:-}" ]; then
+          if git fetch --quiet --depth=1 origin "$BASE_SHA" 2>/dev/null \
+             && git diff --name-only -z --diff-filter=ACMR "$BASE_SHA" HEAD > "$RUNNER_TEMP/m1-changed.nul" 2>/dev/null; then
+            python3 -c 'import os,sys; ap,cp=sys.argv[1],sys.argv[2]; found=[p for p in open(ap,"rb").read().split(b"\0") if p]; changed={os.path.normpath(p) for p in open(cp,"rb").read().split(b"\0") if p}; kept=[p for p in found if os.path.normpath(p) in changed]; f=open(ap,"wb"); _=[f.write(p+b"\0") for p in kept]; f.close(); print("changed-only: kept %d of %d script(s)" % (len(kept), len(found)))' "$RUNNER_TEMP/m1-scripts.nul" "$RUNNER_TEMP/m1-changed.nul"
+          else
+            echo "::warning::changed-only requested but the PR base could not be diffed; checking the full tree"
+          fi
+        fi
         # Count -print0 records by their NUL terminators (robust for names with spaces/newlines).
         count=$(tr -dc '\0' < "$RUNNER_TEMP/m1-scripts.nul" | wc -c | tr -d ' ')
         echo "count=$count" >> "$GITHUB_OUTPUT"
