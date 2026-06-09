@@ -3,7 +3,7 @@ name: Release
 # Cuts a GitHub Release (and tag) whenever the VERSION file names a version that
 # has no release yet — so bumping VERSION in a merged PR is all it takes to ship
 # a new m1-ci tag. Consumers then pin the reusable workflow,
-# `uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.9.2`. Can also be run
+# `uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.9.3`. Can also be run
 # manually via the Actions tab.
 
 on:
