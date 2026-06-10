@@ -14,10 +14,12 @@
   <ComponentStream>
    <List>
     <Component Classname="BuiltIn.GroupCompound" Name="Root.Demo"/>
-    <Component Classname="BuiltIn.Channel" Name="Root.Demo.Speed"><Props Security="Tune"/></Component>
-    <Component Classname="BuiltIn.Parameter" Name="Root.Demo.Gain.Value"><Props/></Component>
+    <Component Classname="BuiltIn.Channel" Name="Root.Demo.Speed"><Props Security="Tune" SelectedTags="Vehicle Normal"/></Component>
+    <Component Classname="BuiltIn.Parameter" Name="Root.Demo.Gain.Value"><Props Security="Tune" SelectedTags="Vehicle Tune"/></Component>
     <Component Classname="BuiltIn.Constant" Name="Root.Demo.Limit"><Props Value="100"/></Component>
-    <Component Classname="BuiltIn.FuncUser" Filename="Demo Update.m1scr" Name="Root.Demo.Update"/>
+    <Component Classname="BuiltIn.FuncUser" Filename="Demo Update.m1scr" Name="Root.Demo.Update"><Props SelectedTrigger="Parent.Parent.Events.On 100Hz"/></Component>
+    <Component Classname="BuiltIn.GroupCompound" Name="Root.Events"/>
+    <Component Classname="BuiltIn.EventKernel" Name="Root.Events.On 100Hz"/>
    </List>
   </ComponentStream>
  </Project>
