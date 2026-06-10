@@ -58,9 +58,9 @@ on:
         type: string
         default: "v0.14.0"
       typecheck-version:
-        description: "m1-typecheck release to install: a tag like 'v0.30.1', or 'latest'."
+        description: "m1-typecheck release to install: a tag like 'v0.31.0', or 'latest'."
         type: string
-        default: "v0.30.1"
+        default: "v0.31.0"
       project-version:
         description: "m1-project release to install: a tag like 'v0.4.0', or 'latest'."
         type: string
