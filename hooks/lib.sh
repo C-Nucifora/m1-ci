@@ -16,6 +16,16 @@ HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$HOOKS_DIR/.." && pwd)"
 CACHE_DIR="${M1_CI_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/m1-ci/bin}"
 
+# Owner of a tool's GitHub repo. Every tool lives under C-Nucifora except
+# m1-project (nedlane) — the release-download/attestation/source URLs are
+# per-tool for that reason.
+tool_owner() {
+  case "$1" in
+    m1-project) echo "nedlane" ;;
+    *) echo "C-Nucifora" ;;
+  esac
+}
+
 # Read M1_<KEY>_VERSION from tools.env (e.g. tool_version LINT -> v0.9.0).
 tool_version() {
   local key="$1" var="M1_${1}_VERSION" line
@@ -59,7 +69,8 @@ asset_suffix() {
 
 # Ensure the pinned `<tool>` binary is cached; print its path on stdout.
 ensure_tool() {
-  local tool="$1" version suffix asset url dest
+  local tool="$1" version suffix asset url dest owner
+  owner="$(tool_owner "$tool")"
   version="$(tool_version "$(printf '%s' "${tool#m1-}" | tr '[:lower:]' '[:upper:]')")"
   suffix="$(asset_suffix)"
 
@@ -76,14 +87,14 @@ ensure_tool() {
 
   if [ -n "$suffix" ]; then
     asset="${tool}-${suffix}"
-    url="https://github.com/C-Nucifora/${tool}/releases/download/${version}/${asset}"
+    url="https://github.com/${owner}/${tool}/releases/download/${version}/${asset}"
     echo "m1-ci hook: fetching ${tool} ${version} ($suffix)…" >&2
     if curl -fsSL -o "$dest.tmp" "$url"; then
       # Verify GitHub-native build provenance when gh is available and
       # authenticated (mirrors the CI install action); degrade gracefully —
       # a release predating attestation, or no gh, only warns (#23).
       if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-        if gh attestation verify "$dest.tmp" --repo "C-Nucifora/${tool}" >/dev/null 2>&1; then
+        if gh attestation verify "$dest.tmp" --repo "${owner}/${tool}" >/dev/null 2>&1; then
           echo "m1-ci hook: verified build provenance for ${tool} ${version}." >&2
         else
           echo "m1-ci hook: warning: no verifiable build provenance for ${tool} ${version}; proceeding." >&2
@@ -105,7 +116,7 @@ ensure_tool() {
     echo "m1-ci hook: cannot install ${tool}: no prebuilt binary and cargo is not available." >&2
     exit 1
   fi
-  cargo install --locked --git "https://github.com/C-Nucifora/${tool}.git" --tag "$version" \
+  cargo install --locked --git "https://github.com/${owner}/${tool}.git" --tag "$version" \
     --root "$CACHE_DIR/cargo-${tool}-${version}" "$tool" >&2
   cp "$CACHE_DIR/cargo-${tool}-${version}/bin/${tool}${ext}" "$dest"
   printf '%s\n' "$dest"

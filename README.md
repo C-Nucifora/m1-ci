@@ -39,6 +39,7 @@ the lint and type check. You get a separate ✓/✗ status on the PR for each:
 | Format check (m1-fmt) | `m1-fmt --check` | a script is not canonically formatted |
 | Lint (m1-lint) | `m1-lint` | an **error**-severity lint fires (or a syntax error) |
 | Type check (m1-typecheck) | `m1-typecheck` | an **error**-severity type diagnostic fires |
+| Project validation (m1-project) | `m1-project validate` | an error-level structural finding in `Project.m1prj` (skipped silently when no project file exists) |
 
 Because the jobs are independent, a single PR can show e.g. *Format check ✗ /
 Lint ✓ / Type check ✗* at once — you see every problem in one run instead of
@@ -46,6 +47,22 @@ fixing formatting just to discover the next failure.
 
 Set [`fail-on-warning`](#inputs) to also fail on warning-severity diagnostics
 (line length, complexity, `eq`-over-`==`, …), which otherwise only annotate.
+
+Set [`sarif-upload`](#inputs) to additionally push the lint findings to GitHub
+**code scanning** (Security tab, per-rule alert dismissal, new-alerts diffing on
+PRs) via `m1-lint --format sarif` + `github/codeql-action/upload-sarif`. The
+calling job must grant `permissions: security-events: write`:
+
+```yaml
+jobs:
+  check:
+    permissions:
+      contents: read
+      security-events: write
+    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.11.0
+    with:
+      sarif-upload: true
+```
 
 If a `parameters.m1cfg` sits beside your `Project.m1prj`, the type checker
 auto-discovers it and uses its parameter **value types and units** — so the type
@@ -73,6 +90,7 @@ repos:
       - id: m1-fmt
       - id: m1-lint
       - id: m1-typecheck
+      - id: m1-project-validate
 ```
 
 Then `pre-commit install`. Each hook downloads (once, cached under
@@ -88,7 +106,8 @@ drift.
 ## How the tools are installed
 
 `check.yml` downloads the **prebuilt release binaries** published by each tool
-repo (`m1-fmt` / `m1-lint` / `m1-typecheck`) for the runner. If a release is
+repo (`m1-fmt` / `m1-lint` / `m1-typecheck` / `m1-project` — the last lives
+under `nedlane/`, the rest under `C-Nucifora/`) for the runner. If a release is
 unavailable for the requested version, it transparently falls back to building
 from source (`cargo install --git`).
 
@@ -112,6 +131,9 @@ override a single tool's `*-version`).
 | `run-fmt` | `true` | Run the formatter check. |
 | `run-lint` | `true` | Run the linter. |
 | `run-typecheck` | `true` | Run the type checker. |
+| `project-version` | `v0.3.1` | `m1-project` release to install: a tag, or `latest`. |
+| `run-project-validate` | `true` | Validate `Project.m1prj` structure with `m1-project validate` (explicit `project-file`, else auto-discovered; skips silently when absent). |
+| `sarif-upload` | `false` | Also emit `m1-lint` findings as SARIF and upload to GitHub **code scanning**. The calling job must grant `permissions: security-events: write`, and code scanning must be available on the repo (public, or Advanced Security). |
 | `fail-on-warning` | `false` | Fail on warning-severity diagnostics, not just errors. |
 
 ## Pinning

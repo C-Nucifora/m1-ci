@@ -70,6 +70,7 @@ jobs:
           check fmt "$M1_FMT_VERSION"
           check lint "$M1_LINT_VERSION"
           check typecheck "$M1_TYPECHECK_VERSION"
+          check project "$M1_PROJECT_VERSION"
           exit "$fail"
 
   # The `m1-ci-ref` input default in check.yml is the tag at which a consuming
@@ -130,22 +131,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Run the m1-fmt / m1-lint / m1-typecheck hooks on the fixture
+      - name: Run the m1-fmt / m1-lint / m1-typecheck / m1-project hooks on the fixture
         run: |
           set -euo pipefail
           find tests/fixture -name '*.m1scr' -print0 | xargs -0 ./hooks/m1-fmt
           find tests/fixture -name '*.m1scr' -print0 | xargs -0 ./hooks/m1-lint
           find tests/fixture -name '*.m1scr' -print0 | xargs -0 ./hooks/m1-typecheck
+          ./hooks/m1-project-validate tests/fixture/Project.m1prj
 
   # Dogfood: run the reusable workflow against the clean fixture project. It must
-  # pass — proving the end-to-end install + fmt/lint/typecheck pipeline is green.
+  # pass — proving the end-to-end install + fmt/lint/typecheck/project-validate
+  # (+ SARIF render/upload, #26) pipeline is green.
   self-test-pass:
     name: Self-test (clean fixture passes)
+    permissions:
+      contents: read
+      security-events: write # exercised by sarif-upload below
     uses: ./.github/workflows/check.yml
     with:
       scripts-path: tests/fixture
       project-file: tests/fixture/Project.m1prj
       fail-on-warning: true
+      sarif-upload: true
       # Dogfood THIS commit's composite actions, not the released default tag —
       # otherwise the self-test would validate the last release, not the PR.
       m1-ci-repo: ${{ github.repository }}

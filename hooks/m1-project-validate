@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# pre-commit hook: m1-project validate on the staged Project.m1prj file(s) —
+# structural invariants (well-formed XML, no duplicate sibling names,
+# resolvable SelectedTrigger references). Exit mirrors the CLI: error-level
+# findings fail; warnings pass (use CI's fail-on-warning to tighten).
+set -euo pipefail
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+bin="$(ensure_tool m1-project)"
+status=0
+for f in "$@"; do
+  "$bin" validate --project "$f" || status=1
+done
+exit "$status"

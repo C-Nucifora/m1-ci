@@ -56,11 +56,15 @@ on:
       lint-version:
         description: "m1-lint release to install: a tag like 'v0.12.2', or 'latest'."
         type: string
-        default: "v0.13.0"
+        default: "v0.14.0"
       typecheck-version:
         description: "m1-typecheck release to install: a tag like 'v0.26.0', or 'latest'."
         type: string
-        default: "v0.28.0"
+        default: "v0.29.0"
+      project-version:
+        description: "m1-project release to install: a tag like 'v0.3.1', or 'latest'."
+        type: string
+        default: "v0.3.1"
       tools-version:
         description: "Master override (advanced). Empty (default) uses the pinned per-tool versions above. Set to 'latest' to track the newest release of every tool; a single tag forces all three (the tools are independently versioned, so a shared tag may not exist for all)."
         type: string
@@ -78,7 +82,7 @@ on:
           This default MUST equal `v$(cat VERSION)` — ci.yml's ci-ref-pin job
           enforces it, so the self-resolving ref cannot drift from the release.
         type: string
-        default: "v0.10.0"
+        default: "v0.11.0"
       m1-ci-repo:
         description: "Repo to load the composite actions from. Override for forks."
         type: string
@@ -95,6 +99,25 @@ on:
         description: "Run m1-typecheck."
         type: boolean
         default: true
+      run-project-validate:
+        description: >
+          Validate the Project.m1prj with `m1-project validate` (structural
+          invariants: well-formed XML, no duplicate sibling names, resolvable
+          SelectedTrigger references). Uses `project-file` when set, otherwise
+          auto-discovers a Project.m1prj under scripts-path's project root.
+          Skips silently when no project file exists (script-only repos).
+        type: boolean
+        default: true
+      sarif-upload:
+        description: >
+          Additionally emit m1-lint findings as SARIF and upload them to GitHub
+          code scanning (github/codeql-action/upload-sarif). The CALLING job
+          must grant `security-events: write` (reusable workflows inherit the
+          caller's permissions) and the repository must have code scanning
+          available (public, or private with Advanced Security) — hence
+          opt-in, default false.
+        type: boolean
+        default: false
       fail-on-warning:
         description: "Fail the build on warning-severity diagnostics, not just errors. m1-lint/m1-typecheck exit 0 on warnings by default."
         type: boolean
@@ -175,6 +198,12 @@ jobs:
     name: Lint (m1-lint)
     if: inputs.run-lint
     runs-on: ubuntu-latest
+    # security-events is only exercised when sarif-upload is enabled; the
+    # effective token is the intersection with what the CALLER granted, so
+    # callers that never enable SARIF are unaffected by requesting it here.
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Check out the project
         uses: actions/checkout@v6
@@ -243,6 +272,106 @@ jobs:
           if [ "$code" -ne 0 ]; then exit "$code"; fi
           if [ "$FAIL_ON_WARNING" = true ] && grep -q 'warning\[' "$RUNNER_TEMP/m1-lint.out"; then
             echo "::error::fail-on-warning: m1-lint reported warning-severity diagnostics"
+            exit 1
+          fi
+
+      # Opt-in (#26): the same file set, re-rendered as SARIF 2.1.0 (m1-lint
+      # --format sarif, C-Nucifora/m1-lint#109) and uploaded to GitHub code
+      # scanning — Security-tab alerts, per-rule dismissal, new-alert diffing
+      # on PRs. Runs even when the lint step above failed on findings (those
+      # findings are exactly what should reach code scanning).
+      - name: Render SARIF (m1-lint --format sarif)
+        if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
+        run: |
+          set -uo pipefail
+          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-lint --format sarif \
+            > "$RUNNER_TEMP/m1-lint.sarif"
+          # m1-lint exits non-zero on findings; the SARIF document on stdout is
+          # still complete. Only an empty document is a real failure.
+          if ! [ -s "$RUNNER_TEMP/m1-lint.sarif" ]; then
+            echo "::error::sarif-upload: m1-lint produced no SARIF output"
+            exit 1
+          fi
+
+      - name: Upload SARIF to code scanning
+        if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ runner.temp }}/m1-lint.sarif
+          category: m1-lint
+
+  project-validate:
+    name: Project validation (m1-project)
+    if: inputs.run-project-validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the project
+        uses: actions/checkout@v6
+
+      # See the fmt job: m1-ci's composite actions aren't in the caller's
+      # checkout, so load them from m1-ci at the pinned ref.
+      - name: Check out m1-ci (for composite actions)
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.m1-ci-repo }}
+          ref: ${{ inputs.m1-ci-ref }}
+          path: .m1-ci
+
+      # The project file: the explicit input, or the nearest Project.m1prj
+      # found under/above scripts-path (the same project the typecheck step
+      # would auto-discover). Empty = skip (script-only repo).
+      - name: Locate Project.m1prj
+        id: locate
+        env:
+          PROJECT_FILE: ${{ inputs.project-file }}
+          SCRIPTS_PATH: ${{ inputs.scripts-path }}
+        run: |
+          set -euo pipefail
+          file="$PROJECT_FILE"
+          if [ -z "$file" ]; then
+            file="$(find "$SCRIPTS_PATH/.." "$SCRIPTS_PATH" -maxdepth 3 -name 'Project.m1prj' -print -quit 2>/dev/null || true)"
+          fi
+          if [ -n "$file" ] && [ ! -f "$file" ]; then
+            echo "::error::project-file '$file' does not exist"
+            exit 1
+          fi
+          if [ -z "$file" ]; then
+            echo "No Project.m1prj found — skipping project validation (script-only repo)."
+          fi
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+      - name: Install m1-project
+        if: steps.locate.outputs.file != ''
+        uses: ./.m1-ci/.github/actions/install-m1-tool
+        with:
+          tool: m1-project
+          version: ${{ inputs.project-version }}
+          tools-version: ${{ inputs.tools-version }}
+          repo: nedlane/m1-project
+          github-token: ${{ github.token }}
+
+      - name: Validate (m1-project validate)
+        if: steps.locate.outputs.file != ''
+        env:
+          PROJECT_FILE: ${{ steps.locate.outputs.file }}
+          FAIL_ON_WARNING: ${{ inputs.fail-on-warning }}
+        run: |
+          # No `-e`: m1-project exits non-zero on error-level findings; we
+          # surface every finding as an annotation first, then propagate.
+          set -uo pipefail
+          m1-project validate --project "$PROJECT_FILE" | tee "$RUNNER_TEMP/m1-project.out"
+          code=${PIPESTATUS[0]}
+          # Findings print as `ERROR <component>: <msg>` / `WARN <component>: <msg>`
+          # — anchor each to the project file as an inline annotation.
+          while IFS= read -r line; do
+            case "$line" in
+              ERROR\ *) echo "::error file=$PROJECT_FILE::${line#ERROR }" ;;
+              WARN\ *) echo "::warning file=$PROJECT_FILE::${line#WARN }" ;;
+            esac
+          done < "$RUNNER_TEMP/m1-project.out"
+          if [ "$code" -ne 0 ]; then exit "$code"; fi
+          if [ "$FAIL_ON_WARNING" = true ] && grep -q '^WARN ' "$RUNNER_TEMP/m1-project.out"; then
+            echo "::error::fail-on-warning: m1-project reported warning-level findings"
             exit 1
           fi
 
