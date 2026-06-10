@@ -59,7 +59,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.11.0
+    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.12.0
     with:
       sarif-upload: true
 ```
