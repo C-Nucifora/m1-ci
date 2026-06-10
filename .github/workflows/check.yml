@@ -58,13 +58,13 @@ on:
         type: string
         default: "v0.14.0"
       typecheck-version:
-        description: "m1-typecheck release to install: a tag like 'v0.26.0', or 'latest'."
+        description: "m1-typecheck release to install: a tag like 'v0.30.0', or 'latest'."
         type: string
-        default: "v0.29.0"
+        default: "v0.30.0"
       project-version:
-        description: "m1-project release to install: a tag like 'v0.3.1', or 'latest'."
+        description: "m1-project release to install: a tag like 'v0.4.0', or 'latest'."
         type: string
-        default: "v0.3.1"
+        default: "v0.4.0"
       tools-version:
         description: "Master override (advanced). Empty (default) uses the pinned per-tool versions above. Set to 'latest' to track the newest release of every tool; a single tag forces all three (the tools are independently versioned, so a shared tag may not exist for all)."
         type: string
