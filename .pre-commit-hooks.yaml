@@ -10,6 +10,7 @@
 #         - id: m1-fmt
 #         - id: m1-lint
 #         - id: m1-typecheck
+#         - id: m1-project-validate
 #
 # Each hook downloads (once, cached) the pinned tool binary named in tools.env —
 # the same version CI installs — so there is nothing to install by hand.
@@ -31,3 +32,9 @@
   entry: hooks/m1-typecheck
   language: script
   files: \.m1scr$
+- id: m1-project-validate
+  name: m1-project validate
+  description: Validate MoTeC M1 Project.m1prj structure (m1-project validate).
+  entry: hooks/m1-project-validate
+  language: script
+  files: (^|/)Project\.m1prj$
