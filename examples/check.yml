@@ -14,7 +14,7 @@ jobs:
     # versions this workflow installs, so a new (stricter) tool release can't
     # break your CI without you bumping this tag deliberately. Keep this in step
     # with the latest m1-ci release: https://github.com/C-Nucifora/m1-ci/releases
-    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.17.0
+    uses: C-Nucifora/m1-ci/.github/workflows/check.yml@v0.18.0
     with:
       # Directory holding your scripts (searched recursively).
       scripts-path: UQR-EV/01.00/Scripts
@@ -26,7 +26,7 @@ jobs:
       # if you need to (a tag like "v0.5.1", or "latest"):
       # fmt-version: v0.4.1
       # lint-version: v0.5.1
-      # typecheck-version: v0.34.1
+      # typecheck-version: v0.34.2
       # tools-version: latest   # master override: track newest of every tool
       # m1-ci-ref / m1-ci-repo: only needed if you fork m1-ci or pin the
       #   workflow at a different tag than its composite-action default.
