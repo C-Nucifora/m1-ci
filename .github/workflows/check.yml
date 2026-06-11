@@ -82,7 +82,7 @@ on:
           This default MUST equal `v$(cat VERSION)` — ci.yml's ci-ref-pin job
           enforces it, so the self-resolving ref cannot drift from the release.
         type: string
-        default: "v0.15.0"
+        default: "v0.15.1"
       m1-ci-repo:
         description: "Repo to load the composite actions from. Override for forks."
         type: string
@@ -380,6 +380,13 @@ jobs:
     name: Type check (m1-typecheck)
     if: inputs.run-typecheck
     runs-on: ubuntu-latest
+    # See the lint job: security-events is only exercised when sarif-upload
+    # is enabled, and the effective token is the intersection with the
+    # caller's grant. Without this the upload-sarif step fails with
+    # "Resource not accessible by integration".
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Check out the project
         uses: actions/checkout@v6
