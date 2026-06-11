@@ -52,15 +52,15 @@ on:
       fmt-version:
         description: "m1-fmt release to install: a tag like 'v0.8.2', or 'latest'."
         type: string
-        default: "v0.9.0"
+        default: "v0.10.0"
       lint-version:
         description: "m1-lint release to install: a tag like 'v0.12.2', or 'latest'."
         type: string
-        default: "v0.14.0"
+        default: "v0.15.0"
       typecheck-version:
-        description: "m1-typecheck release to install: a tag like 'v0.33.0', or 'latest'."
+        description: "m1-typecheck release to install: a tag like 'v0.34.0', or 'latest'."
         type: string
-        default: "v0.33.0"
+        default: "v0.34.0"
       project-version:
         description: "m1-project release to install: a tag like 'v0.4.0', or 'latest'."
         type: string
@@ -82,7 +82,7 @@ on:
           This default MUST equal `v$(cat VERSION)` — ci.yml's ci-ref-pin job
           enforces it, so the self-resolving ref cannot drift from the release.
         type: string
-        default: "v0.14.0"
+        default: "v0.15.0"
       m1-ci-repo:
         description: "Repo to load the composite actions from. Override for forks."
         type: string
@@ -110,7 +110,8 @@ on:
         default: true
       sarif-upload:
         description: >
-          Additionally emit m1-lint findings as SARIF and upload them to GitHub
+          Additionally emit m1-lint and m1-typecheck findings as SARIF (one
+          category each) and upload them to GitHub
           code scanning (github/codeql-action/upload-sarif). The CALLING job
           must grant `security-events: write` (reusable workflows inherit the
           caller's permissions) and the repository must have code scanning
@@ -453,3 +454,34 @@ jobs:
             echo "::error::fail-on-warning: m1-typecheck reported warning-severity diagnostics"
             exit 1
           fi
+
+      # See the lint job: the same file set re-rendered as SARIF 2.1.0
+      # (m1-typecheck --format sarif, C-Nucifora/m1-typecheck#185) and uploaded
+      # under its own category, so type findings — including the M1-Build-parity
+      # errors — reach code scanning alongside the lint ones (#37). Runs even
+      # when the check step above failed on findings.
+      - name: Render SARIF (m1-typecheck --format sarif)
+        if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
+        env:
+          PROJECT_FILE: ${{ inputs.project-file }}
+        run: |
+          set -uo pipefail
+          proj=()
+          if [ -n "$PROJECT_FILE" ]; then
+            proj=(--project "$PROJECT_FILE")
+          fi
+          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-typecheck "${proj[@]}" --format sarif \
+            > "$RUNNER_TEMP/m1-typecheck.sarif"
+          # m1-typecheck exits non-zero on findings; the SARIF document on
+          # stdout is still complete. Only an empty document is a real failure.
+          if ! [ -s "$RUNNER_TEMP/m1-typecheck.sarif" ]; then
+            echo "::error::sarif-upload: m1-typecheck produced no SARIF output"
+            exit 1
+          fi
+
+      - name: Upload SARIF to code scanning
+        if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ runner.temp }}/m1-typecheck.sarif
+          category: m1-typecheck
