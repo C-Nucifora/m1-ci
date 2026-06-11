@@ -52,15 +52,15 @@ on:
       fmt-version:
         description: "m1-fmt release to install: a tag like 'v0.8.2', or 'latest'."
         type: string
-        default: "v0.9.0"
+        default: "v0.10.0"
       lint-version:
         description: "m1-lint release to install: a tag like 'v0.12.2', or 'latest'."
         type: string
-        default: "v0.14.0"
+        default: "v0.15.0"
       typecheck-version:
-        description: "m1-typecheck release to install: a tag like 'v0.33.0', or 'latest'."
+        description: "m1-typecheck release to install: a tag like 'v0.34.0', or 'latest'."
         type: string
-        default: "v0.33.0"
+        default: "v0.34.0"
       project-version:
         description: "m1-project release to install: a tag like 'v0.4.0', or 'latest'."
         type: string
@@ -82,7 +82,7 @@ on:
           This default MUST equal `v$(cat VERSION)` — ci.yml's ci-ref-pin job
           enforces it, so the self-resolving ref cannot drift from the release.
         type: string
-        default: "v0.14.0"
+        default: "v0.15.0"
       m1-ci-repo:
         description: "Repo to load the composite actions from. Override for forks."
         type: string
@@ -110,7 +110,8 @@ on:
         default: true
       sarif-upload:
         description: >
-          Additionally emit m1-lint findings as SARIF and upload them to GitHub
+          Additionally emit m1-lint and m1-typecheck findings as SARIF (one
+          category each) and upload them to GitHub
           code scanning (github/codeql-action/upload-sarif). The CALLING job
           must grant `security-events: write` (reusable workflows inherit the
           caller's permissions) and the repository must have code scanning
