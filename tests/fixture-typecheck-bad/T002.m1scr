@@ -1,0 +1,4 @@
+// A float compared with == fires T002 (float-equality) — the known T-code
+// finding the typecheck SARIF self-test asserts on.
+local f = 1.5;
+if (f == 2.5) { }

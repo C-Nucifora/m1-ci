@@ -190,3 +190,42 @@ jobs:
             exit 1
           fi
           echo "Broken fixture correctly rejected by m1-lint."
+
+  # The typecheck SARIF path (#37): the pinned m1-typecheck, run over a fixture
+  # with a known T-code finding (T002 float-equality, project-independent),
+  # must emit a SARIF document containing that finding — proving what the
+  # check.yml render step uploads is real, not an empty shell.
+  self-test-typecheck-sarif:
+    name: Self-test (typecheck SARIF carries a T-code)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Read pinned versions from tools.env
+        id: pins
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          . ./tools.env
+          echo "typecheck-version=$M1_TYPECHECK_VERSION" >> "$GITHUB_OUTPUT"
+      - name: Install m1-typecheck
+        uses: ./.github/actions/install-m1-tool
+        with:
+          tool: m1-typecheck
+          version: ${{ steps.pins.outputs.typecheck-version }}
+          github-token: ${{ github.token }}
+      - name: Assert the T002 fixture reaches the SARIF document
+        run: |
+          set -uo pipefail
+          # Exit-code semantics are unchanged by --format sarif: findings still
+          # exit non-zero, and the document on stdout is still complete.
+          if m1-typecheck --format sarif tests/fixture-typecheck-bad/T002.m1scr \
+              > "$RUNNER_TEMP/m1-typecheck.sarif"; then
+            echo "::error::m1-typecheck exited 0 on the T002 fixture — the gate is not failing as it should"
+            exit 1
+          fi
+          if ! grep -q '"ruleId":"T002"' "$RUNNER_TEMP/m1-typecheck.sarif"; then
+            echo "::error::typecheck SARIF does not contain the expected T002 finding"
+            cat "$RUNNER_TEMP/m1-typecheck.sarif"
+            exit 1
+          fi
+          echo "T002 finding present in the SARIF document."

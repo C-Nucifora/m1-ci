@@ -453,3 +453,34 @@ jobs:
             echo "::error::fail-on-warning: m1-typecheck reported warning-severity diagnostics"
             exit 1
           fi
+
+      # See the lint job: the same file set re-rendered as SARIF 2.1.0
+      # (m1-typecheck --format sarif, C-Nucifora/m1-typecheck#185) and uploaded
+      # under its own category, so type findings — including the M1-Build-parity
+      # errors — reach code scanning alongside the lint ones (#37). Runs even
+      # when the check step above failed on findings.
+      - name: Render SARIF (m1-typecheck --format sarif)
+        if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
+        env:
+          PROJECT_FILE: ${{ inputs.project-file }}
+        run: |
+          set -uo pipefail
+          proj=()
+          if [ -n "$PROJECT_FILE" ]; then
+            proj=(--project "$PROJECT_FILE")
+          fi
+          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-typecheck "${proj[@]}" --format sarif \
+            > "$RUNNER_TEMP/m1-typecheck.sarif"
+          # m1-typecheck exits non-zero on findings; the SARIF document on
+          # stdout is still complete. Only an empty document is a real failure.
+          if ! [ -s "$RUNNER_TEMP/m1-typecheck.sarif" ]; then
+            echo "::error::sarif-upload: m1-typecheck produced no SARIF output"
+            exit 1
+          fi
+
+      - name: Upload SARIF to code scanning
+        if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ runner.temp }}/m1-typecheck.sarif
+          category: m1-typecheck
