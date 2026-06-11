@@ -296,7 +296,7 @@ jobs:
 
       - name: Upload SARIF to code scanning
         if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ runner.temp }}/m1-lint.sarif
           category: m1-lint
@@ -488,7 +488,7 @@ jobs:
 
       - name: Upload SARIF to code scanning
         if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ runner.temp }}/m1-typecheck.sarif
           category: m1-typecheck
