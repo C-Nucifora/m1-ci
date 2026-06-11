@@ -52,11 +52,11 @@ on:
       fmt-version:
         description: "m1-fmt release to install: a tag like 'v0.8.2', or 'latest'."
         type: string
-        default: "v0.10.0"
+        default: "v0.11.0"
       lint-version:
         description: "m1-lint release to install: a tag like 'v0.12.2', or 'latest'."
         type: string
-        default: "v0.15.0"
+        default: "v0.16.0"
       typecheck-version:
         description: "m1-typecheck release to install: a tag like 'v0.34.0', or 'latest'."
         type: string
@@ -82,7 +82,7 @@ on:
           This default MUST equal `v$(cat VERSION)` — ci.yml's ci-ref-pin job
           enforces it, so the self-resolving ref cannot drift from the release.
         type: string
-        default: "v0.15.2"
+        default: "v0.16.0"
       m1-ci-repo:
         description: "Repo to load the composite actions from. Override for forks."
         type: string
