@@ -40,8 +40,45 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: v${{ steps.v.outputs.version }}
         run: |
+          # Body: auto-generated "What's Changed" (PR list + full changelog
+          # link) followed by a consume/install snippet. PR titles may contain
+          # backticks, so the generated half never passes through an unquoted
+          # heredoc; the static half is a quoted heredoc with placeholders
+          # substituted afterwards.
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" \
+            -q .body > body.md || echo "_Generated notes unavailable._" > body.md
+          cat >> body.md <<'NOTES'
+
+          ## Pin
+
+          Consume the reusable workflow and the pre-commit hooks at this exact tag:
+
+          ```yaml
+          # .github/workflows/check.yml
+          jobs:
+            m1:
+              uses: {{REPO}}/.github/workflows/check.yml@{{TAG}}
+          ```
+
+          ```yaml
+          # .pre-commit-config.yaml
+          - repo: https://github.com/{{REPO}}
+            rev: {{TAG}}
+          ```
+          NOTES
+          sed -i "s|{{REPO}}|$GITHUB_REPOSITORY|g; s|{{TAG}}|$TAG|g" body.md
+          # The toolchain this tag installs, straight from tools.env.
+          {
+            echo ""
+            echo "## Pinned M1 toolchain"
+            echo ""
+            echo "| Tool | Version |"
+            echo "| --- | --- |"
+            sed -n 's/^M1_\(.*\)_VERSION=\(.*\)$/| m1-\L\1\E | \2 |/p' tools.env
+          } >> body.md
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "m1-ci $TAG" \
-            --generate-notes
+            --notes-file body.md
