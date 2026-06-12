@@ -50,19 +50,19 @@ on:
       #
       # These defaults MUST match tools.env — ci.yml's tools-pins job enforces it.
       fmt-version:
-        description: "m1-fmt release to install: a tag like 'v0.8.2', or 'latest'."
+        description: "m1-fmt release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
         default: "v0.12.0"
       lint-version:
-        description: "m1-lint release to install: a tag like 'v0.12.2', or 'latest'."
+        description: "m1-lint release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
         default: "v0.18.0"
       typecheck-version:
-        description: "m1-typecheck release to install: a tag like 'v0.34.0', or 'latest'."
+        description: "m1-typecheck release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
         default: "v0.35.0"
       project-version:
-        description: "m1-project release to install: a tag like 'v0.5.0', or 'latest'."
+        description: "m1-project release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
         default: "v0.6.0"
       tools-version:

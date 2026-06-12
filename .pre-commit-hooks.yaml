@@ -5,7 +5,7 @@
 #
 #   repos:
 #     - repo: https://github.com/C-Nucifora/m1-ci
-#       rev: v0.9.3
+#       rev: vX.Y.Z  # the same m1-ci tag as your workflow's `uses: …check.yml@vX.Y.Z`
 #       hooks:
 #         - id: m1-fmt
 #         - id: m1-lint
