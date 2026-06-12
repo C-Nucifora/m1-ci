@@ -54,6 +54,7 @@ jobs:
             exit 0
           fi
           title="drift: tools.env pins behind latest tool releases"
+          # shellcheck disable=SC2016  # the backticked names are literal markdown
           body=$(printf 'The scheduled drift canary found stale pins in `tools.env`:\n\n%b\nBump `tools.env` together with the `check.yml` defaults, the pre-commit examples, and `VERSION`, then cut a new m1-ci release (see AGENTS.md release mechanics).\n\n_Refreshed automatically by the drift-canary workflow; closes itself out by being fixed + closed._' "$stale")
           existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
             --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
