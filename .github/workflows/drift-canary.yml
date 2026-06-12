@@ -1,0 +1,66 @@
+# Scheduled drift canary (#44): tools.env pins vs the latest released tool
+# versions. The release cascade is human-driven (consumer bump PRs within
+# minutes of a release; Dependabot daily as backstop) — this is the
+# observability backstop for the backstop: if a tool releases and tools.env is
+# never bumped, every consumer silently installs stale tools. On drift it
+# opens (or refreshes) ONE issue rather than failing main: a red badge for an
+# external event would punish unrelated PRs, an issue is actionable.
+name: Tool-pin drift canary
+
+on:
+  schedule:
+    - cron: "17 19 * * *" # daily, offset from Dependabot's schedule
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Compare tools.env pins to latest releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          . ./tools.env
+          # owner override map mirrors check.yml (nedlane-owned tools).
+          declare -A repos=(
+            [m1-fmt]="C-Nucifora/m1-fmt"
+            [m1-lint]="C-Nucifora/m1-lint"
+            [m1-typecheck]="C-Nucifora/m1-typecheck"
+            [m1-project]="nedlane/m1-project"
+          )
+          declare -A pins=(
+            [m1-fmt]="$M1_FMT_VERSION"
+            [m1-lint]="$M1_LINT_VERSION"
+            [m1-typecheck]="$M1_TYPECHECK_VERSION"
+            [m1-project]="$M1_PROJECT_VERSION"
+          )
+          stale=""
+          for tool in m1-fmt m1-lint m1-typecheck m1-project; do
+            latest=$(gh api "repos/${repos[$tool]}/releases/latest" --jq .tag_name)
+            pinned="${pins[$tool]}"
+            if [ "$latest" != "$pinned" ]; then
+              stale="${stale}- \`$tool\`: pinned \`$pinned\`, latest \`$latest\`\n"
+            fi
+            echo "$tool: pinned=$pinned latest=$latest"
+          done
+          if [ -z "$stale" ]; then
+            echo "All pins current."
+            exit 0
+          fi
+          title="drift: tools.env pins behind latest tool releases"
+          body=$(printf 'The scheduled drift canary found stale pins in `tools.env`:\n\n%b\nBump `tools.env` together with the `check.yml` defaults, the pre-commit examples, and `VERSION`, then cut a new m1-ci release (see AGENTS.md release mechanics).\n\n_Refreshed automatically by the drift-canary workflow; closes itself out by being fixed + closed._' "$stale")
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+            echo "Refreshed existing issue #$existing."
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+            echo "Opened a new drift issue."
+          fi

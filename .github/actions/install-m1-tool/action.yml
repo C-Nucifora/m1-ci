@@ -33,8 +33,11 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install ${{ inputs.tool }} (prebuilt)
-      id: prebuilt
+    # Resolve the effective version up front so `latest` becomes a concrete,
+    # immutable tag — which makes the binary cacheable (#43) and the install
+    # reproducible within a run.
+    - name: Resolve ${{ inputs.tool }} version
+      id: resolve
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
@@ -44,17 +47,62 @@ runs:
         TOOL_REPO: ${{ inputs.repo }}
       run: |
         set -euo pipefail
+        version="$TOOL_VERSION"
+        # Master override wins over the per-tool pin when set.
+        [ -n "$TOOLS_VERSION" ] && version="$TOOLS_VERSION"
+        repo="${TOOL_REPO:-C-Nucifora/$TOOL}"
+        if [ "$version" = latest ]; then
+          # Resolve to the concrete tag; if the API call fails, fall back to
+          # the mutable 'latest' (which then bypasses the cache).
+          version=$(gh api "repos/$repo/releases/latest" --jq .tag_name 2>/dev/null || echo latest)
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "repo=$repo" >> "$GITHUB_OUTPUT"
+        echo "cacheable=$([ "$version" = latest ] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+
+    # A pinned release asset is immutable: cache the (already verified) binary
+    # by tool+version+target so the common path skips the download AND the
+    # attestation round-trip, and survives transient release-asset 5xx (#43).
+    - name: Cache ${{ inputs.tool }} binary
+      id: bincache
+      if: steps.resolve.outputs.cacheable == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.m1-tool-cache/${{ inputs.tool }}
+        key: m1-tool-${{ inputs.tool }}-${{ steps.resolve.outputs.version }}-x86_64-unknown-linux-gnu
+
+    - name: Install ${{ inputs.tool }} (prebuilt)
+      id: prebuilt
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        TOOL: ${{ inputs.tool }}
+        VERSION: ${{ steps.resolve.outputs.version }}
+        REPO: ${{ steps.resolve.outputs.repo }}
+        CACHE_HIT: ${{ steps.bincache.outputs.cache-hit }}
+      run: |
+        set -euo pipefail
         mkdir -p "$HOME/.local/bin"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
         target=x86_64-unknown-linux-gnu
         tool="$TOOL"
-        version="$TOOL_VERSION"
-        # Master override wins over the per-tool pin when set.
-        [ -n "$TOOLS_VERSION" ] && version="$TOOLS_VERSION"
-        repo="${TOOL_REPO:-C-Nucifora/$tool}"
+        version="$VERSION"
+        repo="$REPO"
         asset="$tool-$target"
         dest="$HOME/.local/bin/$tool"
+        cached="$HOME/.m1-tool-cache/$tool/$tool"
         echo "::group::Install $tool ($version)"
+        if [ "$CACHE_HIT" = "true" ] && [ -f "$cached" ]; then
+          # The cached binary was attestation-verified before being stored,
+          # and the key pins the exact version — nothing to re-check.
+          install -m 0755 "$cached" "$dest"
+          echo "Installed $tool $version from the binary cache."
+          echo "need-source=false" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "repo=$repo" >> "$GITHUB_OUTPUT"
+          echo "::endgroup::"
+          exit 0
+        fi
         rm -f "$RUNNER_TEMP/$asset"
         if [ "$version" = latest ]; then
           gh release download --repo "$repo" --pattern "$asset" \
@@ -66,15 +114,23 @@ runs:
         need_source=false
         if [ -f "$RUNNER_TEMP/$asset" ]; then
           # Verify GitHub-native build provenance before trusting the binary
-          # we are about to chmod +x and run on the caller's source (#7). A
-          # release that predates attestation has none yet, so warn and proceed.
-          if gh attestation verify "$RUNNER_TEMP/$asset" --repo "$repo" >/dev/null 2>&1; then
+          # we are about to chmod +x and run on the caller's source (#7).
+          # Classify the failure (#48): a release that predates attestation
+          # has none ("no attestations found") — warn and proceed. Anything
+          # else from an authenticated gh (tampered asset, wrong repo, bad
+          # predicate) FAILS CLOSED instead of running the binary anyway.
+          if out=$(gh attestation verify "$RUNNER_TEMP/$asset" --repo "$repo" 2>&1); then
             echo "Verified build provenance for $tool $version."
+          elif printf '%s' "$out" | grep -qiE 'no attestations found|HTTP 404|Not Found'; then
+            echo "::warning::no build provenance for $tool $version (release predates attestation); proceeding."
           else
-            echo "::warning::no verifiable build provenance for $tool $version (release predates attestation); proceeding."
+            echo "::error::build-provenance verification FAILED for $tool $version — refusing to run the binary."
+            printf '%s\n' "$out"
+            exit 1
           fi
-          mv "$RUNNER_TEMP/$asset" "$dest"
-          chmod +x "$dest"
+          mkdir -p "$HOME/.m1-tool-cache/$tool"
+          install -m 0755 "$RUNNER_TEMP/$asset" "$cached"
+          install -m 0755 "$RUNNER_TEMP/$asset" "$dest"
           echo "Installed $tool $version from a release binary."
         else
           echo "No release asset for $tool ($version); building from source."

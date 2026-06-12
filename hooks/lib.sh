@@ -94,10 +94,18 @@ ensure_tool() {
       # authenticated (mirrors the CI install action); degrade gracefully —
       # a release predating attestation, or no gh, only warns (#23).
       if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-        if gh attestation verify "$dest.tmp" --repo "${owner}/${tool}" >/dev/null 2>&1; then
+        # Classify failures (#48): a missing attestation (release predates the
+        # pipeline) warns and proceeds; a REAL verification failure from an
+        # authenticated gh (tampered asset, wrong repo) refuses the binary.
+        if _att_out=$(gh attestation verify "$dest.tmp" --repo "${owner}/${tool}" 2>&1); then
           echo "m1-ci hook: verified build provenance for ${tool} ${version}." >&2
+        elif printf '%s' "$_att_out" | grep -qiE 'no attestations found|HTTP 404|Not Found'; then
+          echo "m1-ci hook: warning: no build provenance for ${tool} ${version} (predates attestation); proceeding." >&2
         else
-          echo "m1-ci hook: warning: no verifiable build provenance for ${tool} ${version}; proceeding." >&2
+          echo "m1-ci hook: ERROR: build-provenance verification failed for ${tool} ${version}; refusing to use the binary." >&2
+          printf '%s\n' "$_att_out" >&2
+          rm -f "$dest.tmp"
+          return 1
         fi
       fi
       chmod +x "$dest.tmp"
