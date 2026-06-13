@@ -35,8 +35,8 @@ jobs:
           # regenerate SHA from that release's linux_amd64 tarball, e.g.:
           #   curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${VER}/actionlint_${VER}_linux_amd64.tar.gz" | sha256sum
           # (the official checksums are also in that release's checksums.txt).
-          VER=1.7.7
-          SHA=023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757
+          VER=1.7.12
+          SHA=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
           curl -fsSL -o actionlint.tgz \
             "https://github.com/rhysd/actionlint/releases/download/v${VER}/actionlint_${VER}_linux_amd64.tar.gz"
           echo "${SHA}  actionlint.tgz" | sha256sum -c -

@@ -89,6 +89,7 @@ ensure_tool() {
     asset="${tool}-${suffix}"
     url="https://github.com/${owner}/${tool}/releases/download/${version}/${asset}"
     echo "m1-ci hook: fetching ${tool} ${version} ($suffix)…" >&2
+    trap 'rm -f "$dest.tmp"' INT TERM
     if curl -fsSL -o "$dest.tmp" "$url"; then
       # Verify GitHub-native build provenance when gh is available and
       # authenticated (mirrors the CI install action); degrade gracefully —
@@ -105,14 +106,17 @@ ensure_tool() {
           echo "m1-ci hook: ERROR: build-provenance verification failed for ${tool} ${version}; refusing to use the binary." >&2
           printf '%s\n' "$_att_out" >&2
           rm -f "$dest.tmp"
+          trap - INT TERM
           return 1
         fi
       fi
       chmod +x "$dest.tmp"
       mv "$dest.tmp" "$dest"
+      trap - INT TERM
       printf '%s\n' "$dest"
       return 0
     fi
+    trap - INT TERM
     rm -f "$dest.tmp"
     echo "m1-ci hook: no prebuilt ${tool} for this platform; building from source…" >&2
   else
