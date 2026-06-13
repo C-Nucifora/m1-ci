@@ -337,7 +337,7 @@ jobs:
           set -euo pipefail
           file="$PROJECT_FILE"
           if [ -z "$file" ]; then
-            file="$(find "$SCRIPTS_PATH/.." "$SCRIPTS_PATH" -maxdepth 3 -name 'Project.m1prj' -print -quit 2>/dev/null || true)"
+            file="$(find "$SCRIPTS_PATH/.." "$SCRIPTS_PATH" -maxdepth 3 -type f -name 'Project.m1prj' -print -quit 2>/dev/null || true)"
           fi
           if [ -n "$file" ] && [ ! -f "$file" ]; then
             echo "::error::project-file '$file' does not exist"
