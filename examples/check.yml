@@ -29,6 +29,7 @@ jobs:
       # fmt-version: v0.13.0
       # lint-version: v0.19.1
       # typecheck-version: v0.36.0
+      # project-version: v0.7.0
       # tools-version: latest   # master override: track newest of every tool
       # m1-ci-ref / m1-ci-repo: only needed if you fork m1-ci or pin the
       #   workflow at a different tag than its composite-action default.

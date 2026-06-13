@@ -163,6 +163,7 @@ jobs:
           check fmt "$M1_FMT_VERSION"
           check lint "$M1_LINT_VERSION"
           check typecheck "$M1_TYPECHECK_VERSION"
+          check project "$M1_PROJECT_VERSION"
           exit "$fail"
 
   # The local hooks must actually run the pinned binaries against the clean
