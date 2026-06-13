@@ -130,6 +130,41 @@ jobs:
 
           exit "$fail"
 
+      # The commented per-tool override examples in examples/check.yml
+      # (`# fmt-version: vX.Y.Z`, etc.) double as documentation of the tools
+      # THIS m1-ci tag pins. If they drift behind tools.env a developer who
+      # copies and uncomments one silently pins a stale tool (#54). Assert each
+      # commented version equals the matching tools.env pin.
+      - name: Assert examples/check.yml override comments match tools.env
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          . ./tools.env
+          fail=0
+          # Read the version off a `# <tool>-version: vX.Y.Z` comment line.
+          comment_for() {
+            awk -v key="$1-version:" '
+              $1 == "#" && $2 == key { print $3; exit }
+            ' examples/check.yml
+          }
+          check() {
+            local tool="$1" envv="$2" ex
+            ex="$(comment_for "$tool")"
+            if [ -z "$ex" ]; then
+              echo "::error::examples/check.yml: no '# $tool-version:' comment found"
+              fail=1
+            elif [ "$ex" != "$envv" ]; then
+              echo "::error::examples/check.yml $tool-version comment '$ex' != tools.env '$envv' — refresh it"
+              fail=1
+            else
+              echo "examples $tool-version: $ex (matches tools.env)"
+            fi
+          }
+          check fmt "$M1_FMT_VERSION"
+          check lint "$M1_LINT_VERSION"
+          check typecheck "$M1_TYPECHECK_VERSION"
+          exit "$fail"
+
   # The local hooks must actually run the pinned binaries against the clean
   # fixture and pass — proving the download+exec path works end to end.
   self-test-hooks:

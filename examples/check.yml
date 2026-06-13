@@ -23,10 +23,12 @@ jobs:
       project-file: UQR-EV/01.00/Project.m1prj
       # Optional knobs (defaults shown):
       # The toolchain is pinned by THIS m1-ci tag. Override a single tool only
-      # if you need to (a tag like "v0.5.1", or "latest"):
-      # fmt-version: v0.4.1
-      # lint-version: v0.5.1
-      # typecheck-version: v0.34.2
+      # if you need to (a tag like "v0.13.0", or "latest"). The values below are
+      # the tools this m1-ci tag pins (kept in step with tools.env by the
+      # ci-ref-pin CI job); uncomment one only to deviate from that pin:
+      # fmt-version: v0.13.0
+      # lint-version: v0.19.0
+      # typecheck-version: v0.36.0
       # tools-version: latest   # master override: track newest of every tool
       # m1-ci-ref / m1-ci-repo: only needed if you fork m1-ci or pin the
       #   workflow at a different tag than its composite-action default.

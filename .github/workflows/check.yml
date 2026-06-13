@@ -282,6 +282,7 @@ jobs:
       # on PRs. Runs even when the lint step above failed on findings (those
       # findings are exactly what should reach code scanning).
       - name: Render SARIF (m1-lint --format sarif)
+        id: render-sarif-lint
         if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
         run: |
           set -uo pipefail
@@ -294,8 +295,11 @@ jobs:
             exit 1
           fi
 
+      # Only upload once Render actually produced a valid SARIF. !cancelled()
+      # alone is true on Render *failure* too, which would let upload-sarif emit
+      # a second "SARIF file is empty" error masking the real one (#53).
       - name: Upload SARIF to code scanning
-        if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
+        if: inputs.sarif-upload && steps.collect.outputs.count != '0' && steps.render-sarif-lint.outcome == 'success'
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ runner.temp }}/m1-lint.sarif
@@ -468,6 +472,7 @@ jobs:
       # errors — reach code scanning alongside the lint ones (#37). Runs even
       # when the check step above failed on findings.
       - name: Render SARIF (m1-typecheck --format sarif)
+        id: render-sarif-typecheck
         if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
         env:
           PROJECT_FILE: ${{ inputs.project-file }}
@@ -486,8 +491,10 @@ jobs:
             exit 1
           fi
 
+      # See the lint job (#53): gate on Render's success, not !cancelled(),
+      # so a failed render doesn't trigger a masking upload-sarif error.
       - name: Upload SARIF to code scanning
-        if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
+        if: inputs.sarif-upload && steps.collect.outputs.count != '0' && steps.render-sarif-typecheck.outcome == 'success'
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ runner.temp }}/m1-typecheck.sarif
