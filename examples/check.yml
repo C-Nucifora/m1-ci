@@ -34,6 +34,10 @@ jobs:
       # m1-ci-ref / m1-ci-repo: only needed if you fork m1-ci or pin the
       #   workflow at a different tag than its composite-action default.
       # fail-on-warning: false  # true = warnings fail the build too
+      # lint-baseline: .m1lint-baseline.json  # gate on only NEW lint findings.
+      #   Adoption path for a project with pre-existing findings: snapshot them
+      #   once with `m1-lint --write-baseline .m1lint-baseline.json <scripts>`,
+      #   commit the file, then point this at it. Empty (default) gates on all.
       # run-fmt: true
       # run-lint: true
       # run-typecheck: true
