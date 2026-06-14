@@ -271,3 +271,17 @@ jobs:
             exit 1
           fi
           echo "T002 finding present in the SARIF document."
+
+  # The SARIF render must survive xargs batching. xargs runs the tool once per
+  # ~128 KB batch (xargs --show-limits), so a large project's script list makes
+  # it emit several SARIF documents; the render step must aggregate them into one
+  # valid document, not concatenate root JSON objects. This test reproduces the
+  # multi-batch case with a fake tool and also asserts check.yml uses the
+  # aggregating form and structural guard, so a regression is caught.
+  self-test-sarif-batching:
+    name: Self-test (SARIF render survives xargs batching)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: SARIF render aggregates xargs batches
+        run: ./tests/sarif-render-batching.sh
