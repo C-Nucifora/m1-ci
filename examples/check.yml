@@ -26,10 +26,10 @@ jobs:
       # if you need to (a tag like "v0.13.0", or "latest"). The values below are
       # the tools this m1-ci tag pins (kept in step with tools.env by the
       # ci-ref-pin CI job); uncomment one only to deviate from that pin:
-      # fmt-version: v0.13.0
-      # lint-version: v0.20.0
-      # typecheck-version: v0.37.0
-      # project-version: v0.7.0
+      # fmt-version: v0.15.1
+      # lint-version: v0.22.0
+      # typecheck-version: v0.40.1
+      # project-version: v0.9.0
       # tools-version: latest   # master override: track newest of every tool
       # m1-ci-ref / m1-ci-repo: only needed if you fork m1-ci or pin the
       #   workflow at a different tag than its composite-action default.
