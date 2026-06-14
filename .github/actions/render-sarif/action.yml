@@ -1,0 +1,75 @@
+name: Render M1 SARIF
+description: >
+  Re-render the collected M1 scripts as a single SARIF 2.1.0 document with
+  `<tool> --format sarif` and validate it, ready for upload to GitHub code
+  scanning. Reads the NUL-delimited script list collect-scripts wrote and writes
+  the aggregated document to $RUNNER_TEMP/<tool>.sarif.
+
+# Shared by the lint and typecheck jobs in check.yml so the SARIF-aggregation
+# contract — the xargs-batch `jq -s` merge and the `jq -e .runs` structural guard
+# — lives in exactly ONE place and cannot drift between the two jobs (the two
+# render steps were structurally identical, differing only in the tool name and
+# the optional extra-args). See check.yml for why the reusable workflow checks
+# this repo out before `uses:`-ing this action (a reusable workflow's local
+# `uses: ./…` paths resolve against the CALLER's checkout, not m1-ci's).
+
+inputs:
+  tool:
+    description: "Tool name to run, e.g. m1-lint or m1-typecheck (must be on PATH)."
+    required: true
+  extra-flag:
+    description: >
+      Optional single flag to pass to the tool BEFORE `--format sarif`, e.g.
+      `--baseline` (lint) or `--project` (typecheck). Passed together with
+      `extra-value` as two separate argv words (so a value with spaces stays one
+      argument). Empty (default) passes nothing extra.
+    required: false
+    default: ""
+  extra-value:
+    description: >
+      The value for `extra-flag` (e.g. the baseline or project-file path). Only
+      used when `extra-flag` is non-empty. Mirror whatever the matching gate step
+      uses so the SARIF and the gate agree (a finding the gate suppresses must not
+      resurface as a code-scanning alert).
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Render SARIF (${{ inputs.tool }} --format sarif)
+      shell: bash
+      env:
+        TOOL: ${{ inputs.tool }}
+        EXTRA_FLAG: ${{ inputs.extra-flag }}
+        EXTRA_VALUE: ${{ inputs.extra-value }}
+      run: |
+        set -uo pipefail
+        # Optional extra arg (e.g. --baseline <path> / --project <path>), built as
+        # an array so it's omitted entirely — not passed as empty args — when
+        # unset, and so a value containing spaces stays ONE argument. The caller's
+        # gate step already validated the value; here it's just mirrored so the
+        # SARIF matches what the gate reported.
+        extra=()
+        if [ -n "$EXTRA_FLAG" ]; then
+          extra=("$EXTRA_FLAG" "$EXTRA_VALUE")
+        fi
+        # xargs invokes the tool once per batch, and its command buffer is only
+        # ~128 KB (xargs --show-limits), not ARG_MAX — a large project's script
+        # list crosses that and xargs runs the tool MORE THAN ONCE. Each
+        # invocation emits its own complete SARIF document, so a plain `> file`
+        # redirect would concatenate several root JSON objects into one invalid
+        # file. Aggregate every batch's document into ONE: jq -s slurps them,
+        # keeps the first's top-level shape, and concatenates their `runs` arrays.
+        # jq is preinstalled on ubuntu-latest.
+        xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" "$TOOL" "${extra[@]}" --format sarif \
+          | jq -s '.[0] * {runs: (map(.runs) | add)}' \
+          > "$RUNNER_TEMP/$TOOL.sarif"
+        # The tool exits non-zero on findings; the SARIF document is still
+        # complete, so that exit is not a render failure. Validate the AGGREGATED
+        # document instead of merely checking it is non-empty — a concatenated
+        # multi-document file is non-empty but invalid SARIF.
+        if ! jq -e '.runs' "$RUNNER_TEMP/$TOOL.sarif" >/dev/null 2>&1; then
+          echo "::error::sarif-upload: $TOOL produced no valid SARIF output"
+          exit 1
+        fi

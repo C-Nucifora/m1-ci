@@ -324,3 +324,19 @@ jobs:
       - uses: actions/checkout@v6
       - name: lint-baseline input declared, plumbed to both m1-lint runs
         run: ./tests/lint-baseline-input.sh
+
+  # The SARIF render is shared via the render-sarif composite action so the lint
+  # and typecheck render steps don't inline two structurally-identical
+  # aggregate-and-validate heredocs. This test drives the action's render shell
+  # against a fake tool that splits across xargs batches, asserts it produces one
+  # valid aggregated SARIF document (forwarding the extra flag+value, a spaced
+  # value intact) and fails on empty/crash output, and asserts check.yml
+  # delegates to the action (no inline jq -s render) so the aggregation contract
+  # can't drift between the two jobs.
+  self-test-render-sarif:
+    name: Self-test (render-sarif action; no inline render drift)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: render-sarif aggregates batches into one valid document
+        run: ./tests/render-sarif-action.sh

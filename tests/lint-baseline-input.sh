@@ -48,14 +48,21 @@ grep -qE '^[[:space:]]+lint-baseline:' "$workflow" \
 grep -qE 'LINT_BASELINE:[[:space:]]*\$\{\{[[:space:]]*inputs\.lint-baseline' "$workflow" \
   || fail "check.yml does not expose inputs.lint-baseline as the LINT_BASELINE env var"
 
-# 1c. Both m1-lint invocations (the gate AND the SARIF render) append
-#     --baseline when the value is non-empty. Assert each invocation is fed the
-#     assembled baseline argument array — count the occurrences so a future
-#     refactor can't quietly drop one and let suppressed findings resurface as
-#     code-scanning alerts.
-appends="$(grep -cE '\-\-baseline "\$LINT_BASELINE"' "$workflow" || true)"
-[ "$appends" -ge 2 ] \
-  || fail "expected --baseline \"\$LINT_BASELINE\" in BOTH the lint gate and the SARIF render (found $appends)"
+# 1c. The baseline must reach BOTH m1-lint invocations — the gate AND the SARIF
+#     render — when the value is non-empty, so a finding the gate suppresses is
+#     also suppressed in the code-scanning alerts (otherwise the Security tab
+#     would resurface exactly what the gate hides).
+#       * Gate: the run-step shell appends --baseline "$LINT_BASELINE".
+#       * Render: the step delegates to the render-sarif composite action, which
+#         is passed extra-flag: --baseline + extra-value: <the baseline path>.
+# shellcheck disable=SC2016  # grep regex literal; $LINT_BASELINE must stay unexpanded
+grep -qE '\-\-baseline "\$LINT_BASELINE"' "$workflow" \
+  || fail "the lint GATE step does not append --baseline \"\$LINT_BASELINE\""
+# The render passes the baseline to the render-sarif action as the extra flag.
+grep -qE "extra-flag:.*'--baseline'" "$workflow" \
+  || fail "the SARIF render does not pass '--baseline' to the render-sarif action as extra-flag"
+grep -qE 'extra-value:[[:space:]]*\$\{\{[[:space:]]*inputs\.lint-baseline' "$workflow" \
+  || fail "the SARIF render does not pass inputs.lint-baseline to the render-sarif action as extra-value"
 
 # 1d. Documented for consumers: README input mention + commented example knob.
 grep -qi 'lint-baseline' "$readme" \
