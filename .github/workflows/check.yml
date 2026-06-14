@@ -269,40 +269,22 @@ jobs:
       # scanning — Security-tab alerts, per-rule dismissal, new-alert diffing
       # on PRs. Runs even when the lint step above failed on findings (those
       # findings are exactly what should reach code scanning).
+      # The SARIF aggregation + structural guard lives in the render-sarif
+      # composite action so the lint and typecheck render steps share one
+      # canonical source (the body was structurally identical, differing only in
+      # the tool name and the optional extra flag+value — see the action). Here
+      # the extra flag mirrors the gate's baseline: applying the same --baseline
+      # keeps a finding the lint gate suppresses ALSO suppressed in the SARIF
+      # uploaded to code scanning, otherwise the Security tab would resurface
+      # exactly the pre-existing backlog the baseline exists to hide.
       - name: Render SARIF (m1-lint --format sarif)
         id: render-sarif-lint
         if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
-        env:
-          LINT_BASELINE: ${{ inputs.lint-baseline }}
-        run: |
-          set -uo pipefail
-          # Mirror the gate's baseline: apply the same --baseline file here so a
-          # finding the lint gate suppresses is ALSO suppressed in the SARIF
-          # uploaded to code scanning — otherwise the Security tab would resurface
-          # exactly the pre-existing backlog the baseline exists to hide.
-          bl=()
-          if [ -n "$LINT_BASELINE" ]; then
-            bl=(--baseline "$LINT_BASELINE")
-          fi
-          # xargs invokes m1-lint once per batch, and its command buffer is only
-          # ~128 KB (xargs --show-limits), not ARG_MAX — a large project's script
-          # list crosses that and xargs runs the tool MORE THAN ONCE. Each
-          # invocation emits its own complete SARIF document, so a plain
-          # `> file` redirect would concatenate several root JSON objects into
-          # one invalid file. Aggregate every batch's document into ONE: jq -s
-          # slurps them, keeps the first's top-level shape, and concatenates
-          # their `runs` arrays. jq is preinstalled on ubuntu-latest.
-          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-lint "${bl[@]}" --format sarif \
-            | jq -s '.[0] * {runs: (map(.runs) | add)}' \
-            > "$RUNNER_TEMP/m1-lint.sarif"
-          # m1-lint exits non-zero on findings; the SARIF document is still
-          # complete, so that exit is not a render failure. Validate the
-          # AGGREGATED document instead of merely checking it is non-empty — a
-          # concatenated multi-document file is non-empty but invalid SARIF.
-          if ! jq -e '.runs' "$RUNNER_TEMP/m1-lint.sarif" >/dev/null 2>&1; then
-            echo "::error::sarif-upload: m1-lint produced no valid SARIF output"
-            exit 1
-          fi
+        uses: ./.m1-ci/.github/actions/render-sarif
+        with:
+          tool: m1-lint
+          extra-flag: ${{ inputs.lint-baseline != '' && '--baseline' || '' }}
+          extra-value: ${{ inputs.lint-baseline }}
 
       # Upload only once Render produced a valid SARIF (#53): !cancelled() alone
       # is true on Render *failure* too, which would let upload-sarif emit a
@@ -461,36 +443,21 @@ jobs:
           fi
 
       # See the lint job: the same file set re-rendered as SARIF 2.1.0
-      # (m1-typecheck --format sarif, C-Nucifora/m1-typecheck#185) and uploaded
-      # under its own category, so type findings — including the M1-Build-parity
-      # errors — reach code scanning alongside the lint ones (#37). Runs even
-      # when the check step above failed on findings.
+      # (m1-typecheck --format sarif, C-Nucifora/m1-typecheck#185) via the shared
+      # render-sarif composite action (one canonical SARIF-aggregation source) and
+      # uploaded under its own category, so type findings — including the
+      # M1-Build-parity errors — reach code scanning alongside the lint ones (#37).
+      # The extra flag carries --project so the render uses the same project
+      # context the gate did. Runs even when the check step above failed on
+      # findings.
       - name: Render SARIF (m1-typecheck --format sarif)
         id: render-sarif-typecheck
         if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
-        env:
-          PROJECT_FILE: ${{ inputs.project-file }}
-        run: |
-          set -uo pipefail
-          proj=()
-          if [ -n "$PROJECT_FILE" ]; then
-            proj=(--project "$PROJECT_FILE")
-          fi
-          # See the lint render: xargs runs m1-typecheck once per ~128 KB batch,
-          # so a large project emits several SARIF documents. Aggregate them into
-          # one with jq -s (concatenating each batch's `runs`) rather than
-          # redirecting straight to a file, which would concatenate root JSON
-          # objects into an invalid document.
-          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-typecheck "${proj[@]}" --format sarif \
-            | jq -s '.[0] * {runs: (map(.runs) | add)}' \
-            > "$RUNNER_TEMP/m1-typecheck.sarif"
-          # m1-typecheck exits non-zero on findings; the SARIF document is still
-          # complete. Validate the AGGREGATED document (a concatenated multi-doc
-          # file is non-empty but invalid SARIF), not just its size.
-          if ! jq -e '.runs' "$RUNNER_TEMP/m1-typecheck.sarif" >/dev/null 2>&1; then
-            echo "::error::sarif-upload: m1-typecheck produced no valid SARIF output"
-            exit 1
-          fi
+        uses: ./.m1-ci/.github/actions/render-sarif
+        with:
+          tool: m1-typecheck
+          extra-flag: ${{ inputs.project-file != '' && '--project' || '' }}
+          extra-value: ${{ inputs.project-file }}
 
       # See the lint job (#53): keep !cancelled() so the step still runs after
       # the check step fails on findings, and AND a render-success gate on top

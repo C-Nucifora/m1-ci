@@ -22,6 +22,11 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 workflow="$repo_root/.github/workflows/check.yml"
+# The aggregating render now lives in the render-sarif composite action (the lint
+# and typecheck render steps were structurally identical and were hoisted into
+# one canonical source); the static guard below asserts the aggregation + the
+# structural guard live THERE, and that check.yml delegates to it.
+render_action="$repo_root/.github/actions/render-sarif/action.yml"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -103,20 +108,30 @@ echo "ok: jq -e .runs guard accepts the valid document and rejects empty output"
 
 # --- Part 2: static ---------------------------------------------------------
 #
-# Assert check.yml uses the aggregating form and the structural guard, so it
-# can't regress to the broken shape.
-if grep -qE 'xargs -0 -a .*--format sarif.* > .*\.sarif"' "$workflow" \
-   && ! grep -qE 'jq -s ' "$workflow"; then
-  fail "check.yml redirects the SARIF render straight to a file without aggregating xargs batches (jq -s). A large project splits across batches and concatenates multiple SARIF documents."
+# Assert the render-sarif composite action uses the aggregating form and the
+# structural guard, so the render can't regress to the broken shape.
+[ -f "$render_action" ] || fail "missing render-sarif composite action: .github/actions/render-sarif/action.yml"
+if grep -qE 'xargs -0 -a .*--format sarif.* > .*\.sarif"' "$render_action" \
+   && ! grep -qE 'jq -s ' "$render_action"; then
+  fail "render-sarif redirects the SARIF render straight to a file without aggregating xargs batches (jq -s). A large project splits across batches and concatenates multiple SARIF documents."
 fi
-grep -qE 'jq -s ' "$workflow" \
-  || fail "check.yml SARIF render does not aggregate batches (expected a 'jq -s' over the xargs output)"
+grep -qE 'jq -s ' "$render_action" \
+  || fail "render-sarif does not aggregate batches (expected a 'jq -s' over the xargs output)"
 # shellcheck disable=SC2016  # this is a grep regex literal; $RUNNER_TEMP must stay unexpanded
-if grep -qE 'if ! \[ -s "\$RUNNER_TEMP/m1-(lint|typecheck).sarif" \]' "$workflow"; then
-  fail "check.yml still guards the SARIF render with a non-empty-only test ([ -s ]); a concatenated multi-document file passes it. Validate the document instead (e.g. jq -e .runs)."
+if grep -qE 'if ! \[ -s "\$RUNNER_TEMP/.*\.sarif" \]' "$render_action"; then
+  fail "render-sarif still guards with a non-empty-only test ([ -s ]); a concatenated multi-document file passes it. Validate the document instead (e.g. jq -e .runs)."
 fi
-grep -qE 'jq -e .*\.runs' "$workflow" \
-  || fail "check.yml SARIF guard does not validate the document structure (expected 'jq -e ... .runs')"
-echo "ok: check.yml uses the aggregating render (jq -s) and the structural guard (jq -e .runs)"
+grep -qE 'jq -e .*\.runs' "$render_action" \
+  || fail "render-sarif guard does not validate the document structure (expected 'jq -e ... .runs')"
+echo "ok: render-sarif uses the aggregating render (jq -s) and the structural guard (jq -e .runs)"
+
+# And check.yml must DELEGATE to the action — it must not re-inline the
+# aggregation, so the contract has exactly one canonical source.
+grep -qE 'uses: \./\.m1-ci/\.github/actions/render-sarif' "$workflow" \
+  || fail "check.yml does not delegate the SARIF render to the render-sarif composite action"
+if grep -qE 'jq -s ' "$workflow"; then
+  fail "check.yml still inlines the 'jq -s' SARIF aggregation; it should live only in the render-sarif action"
+fi
+echo "ok: check.yml delegates the SARIF render to the composite action (no inline jq -s)"
 
 echo "PASS: SARIF render aggregates xargs batches into a single valid document and validates it"
