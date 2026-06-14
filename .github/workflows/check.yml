@@ -82,7 +82,7 @@ on:
           This default MUST equal `v$(cat VERSION)` — ci.yml's ci-ref-pin job
           enforces it, so the self-resolving ref cannot drift from the release.
         type: string
-        default: "v0.21.0"
+        default: "v0.22.0"
       m1-ci-repo:
         description: "Repo to load the composite actions from. Override for forks."
         type: string
@@ -165,6 +165,18 @@ jobs:
           set -euo pipefail
           # Inlined (not committed-and-referenced) because a reusable workflow runs
           # in the *caller's* checkout — m1-ci's own files are not present here.
+          # m1-fmt --check fails (exit 1) on three distinct lines, all of which a
+          # consumer needs annotated on the file (lint/typecheck annotate every
+          # diagnostic — fmt must too):
+          #   * `<file>: would reformat`                          (would-reformat)
+          #   * `m1-fmt: <file>: N syntax error(s); left unchanged` (exits 1 even
+          #     without --check — the broken-script case the user most needs
+          #     pointed at the file for)
+          #   * `<file>:<line>: warning: <message>`               (parse warning;
+          #     does not itself fail the job, but worth surfacing)
+          # GitHub keys a matcher on its single regexp array (multi-line patterns
+          # chain via line continuation), so each unrelated single-line pattern is
+          # its OWN problemMatcher entry with a distinct owner.
           cat > "$RUNNER_TEMP/m1-matchers.json" <<'JSON'
           {
             "problemMatcher": [
@@ -176,6 +188,29 @@ jobs:
                     "regexp": "^(.+):\\s+would reformat$",
                     "file": 1,
                     "message": 0
+                  }
+                ]
+              },
+              {
+                "owner": "m1-fmt-syntax-error",
+                "severity": "error",
+                "pattern": [
+                  {
+                    "regexp": "^m1-fmt: (.+): \\d+ syntax error\\(s\\); left unchanged$",
+                    "file": 1,
+                    "message": 0
+                  }
+                ]
+              },
+              {
+                "owner": "m1-fmt-warning",
+                "severity": "warning",
+                "pattern": [
+                  {
+                    "regexp": "^(.+):(\\d+): warning: (.+)$",
+                    "file": 1,
+                    "line": 2,
+                    "message": 3
                   }
                 ]
               }
