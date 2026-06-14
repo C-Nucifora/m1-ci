@@ -286,12 +286,23 @@ jobs:
         if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
         run: |
           set -uo pipefail
+          # xargs invokes m1-lint once per batch, and its command buffer is only
+          # ~128 KB (xargs --show-limits), not ARG_MAX — a large project's script
+          # list crosses that and xargs runs the tool MORE THAN ONCE. Each
+          # invocation emits its own complete SARIF document, so a plain
+          # `> file` redirect would concatenate several root JSON objects into
+          # one invalid file. Aggregate every batch's document into ONE: jq -s
+          # slurps them, keeps the first's top-level shape, and concatenates
+          # their `runs` arrays. jq is preinstalled on ubuntu-latest.
           xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-lint --format sarif \
+            | jq -s '.[0] * {runs: (map(.runs) | add)}' \
             > "$RUNNER_TEMP/m1-lint.sarif"
-          # m1-lint exits non-zero on findings; the SARIF document on stdout is
-          # still complete. Only an empty document is a real failure.
-          if ! [ -s "$RUNNER_TEMP/m1-lint.sarif" ]; then
-            echo "::error::sarif-upload: m1-lint produced no SARIF output"
+          # m1-lint exits non-zero on findings; the SARIF document is still
+          # complete, so that exit is not a render failure. Validate the
+          # AGGREGATED document instead of merely checking it is non-empty — a
+          # concatenated multi-document file is non-empty but invalid SARIF.
+          if ! jq -e '.runs' "$RUNNER_TEMP/m1-lint.sarif" >/dev/null 2>&1; then
+            echo "::error::sarif-upload: m1-lint produced no valid SARIF output"
             exit 1
           fi
 
@@ -485,12 +496,19 @@ jobs:
           if [ -n "$PROJECT_FILE" ]; then
             proj=(--project "$PROJECT_FILE")
           fi
+          # See the lint render: xargs runs m1-typecheck once per ~128 KB batch,
+          # so a large project emits several SARIF documents. Aggregate them into
+          # one with jq -s (concatenating each batch's `runs`) rather than
+          # redirecting straight to a file, which would concatenate root JSON
+          # objects into an invalid document.
           xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-typecheck "${proj[@]}" --format sarif \
+            | jq -s '.[0] * {runs: (map(.runs) | add)}' \
             > "$RUNNER_TEMP/m1-typecheck.sarif"
-          # m1-typecheck exits non-zero on findings; the SARIF document on
-          # stdout is still complete. Only an empty document is a real failure.
-          if ! [ -s "$RUNNER_TEMP/m1-typecheck.sarif" ]; then
-            echo "::error::sarif-upload: m1-typecheck produced no SARIF output"
+          # m1-typecheck exits non-zero on findings; the SARIF document is still
+          # complete. Validate the AGGREGATED document (a concatenated multi-doc
+          # file is non-empty but invalid SARIF), not just its size.
+          if ! jq -e '.runs' "$RUNNER_TEMP/m1-typecheck.sarif" >/dev/null 2>&1; then
+            echo "::error::sarif-upload: m1-typecheck produced no valid SARIF output"
             exit 1
           fi
 
