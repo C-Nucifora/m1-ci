@@ -285,3 +285,15 @@ jobs:
       - uses: actions/checkout@v6
       - name: SARIF render aggregates xargs batches
         run: ./tests/sarif-render-batching.sh
+
+  # The fmt job fails (exit 1) on syntax errors and emits parse warnings, not
+  # only on "would reformat". The fmt problem matcher must annotate the file in
+  # all three cases, so a red fmt job points the consumer at the offending
+  # script (matching lint/typecheck, which annotate every diagnostic).
+  self-test-fmt-matcher:
+    name: Self-test (fmt matcher annotates syntax errors)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: fmt matcher covers would-reformat, syntax-error and parse-warning
+        run: ./tests/fmt-matcher-syntax-error.sh
