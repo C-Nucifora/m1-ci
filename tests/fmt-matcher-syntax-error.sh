@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regression test for the fmt problem matcher in check.yml.
+# Regression test for the fmt problem matcher.
 #
 # The format-check job (`m1-fmt --check`) fails (exit 1) not only when a file
 # "would reformat", but ALSO when a script has syntax errors or emits parse
@@ -15,9 +15,13 @@
 # so the syntax-error failure case — the exact case a user most needs guidance
 # on — produced a red job with NO inline annotation pointing at the file.
 #
+# The matcher JSON now lives in the register-matchers composite action (the fmt
+# variant under `kind: fmt`), so check.yml's jobs share one source instead of
+# inlining three near-identical heredocs.
+#
 # This test:
-#   1. Extracts the fmt matcher JSON embedded in check.yml's "Register problem
-#      matchers" step (the fmt job) and parses it.
+#   1. Extracts the fmt matcher JSON from the register-matchers action (the
+#      `kind: fmt` variant, the FIRST <<'JSON' heredoc) and parses it.
 #   2. Behavioural: asserts the matcher set actually MATCHES each of the three
 #      m1-fmt output lines above (capturing file / line / message as expected),
 #      and does not match unrelated noise.
@@ -28,7 +32,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-workflow="$repo_root/.github/workflows/check.yml"
+workflow="$repo_root/.github/actions/register-matchers/action.yml"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -46,11 +50,10 @@ workflow = sys.argv[1]
 with open(workflow, encoding="utf-8") as fh:
     lines = fh.readlines()
 
-# Locate the FMT job's "Register problem matchers" step heredoc. The fmt job is
-# the first job in the file; its matcher heredoc is delimited by `<<'JSON'` and a
-# closing `JSON` line. Extract that block, strip the YAML run-block indentation,
-# and parse it. (We deliberately take the FIRST such heredoc — the fmt job
-# precedes the lint/typecheck jobs in check.yml.)
+# Locate the register-matchers action's `kind: fmt` matcher heredoc. The action
+# writes the fmt variant first, delimited by `<<'JSON'` and a closing `JSON`
+# line, then the diagnostic variant. Extract the FIRST such block (the fmt one),
+# strip the indentation, and parse it.
 start = end = None
 for i, line in enumerate(lines):
     if "<<'JSON'" in line:

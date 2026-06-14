@@ -160,64 +160,14 @@ jobs:
           tools-version: ${{ inputs.tools-version }}
           github-token: ${{ github.token }}
 
+      # The matcher JSON lives in the register-matchers composite action so the
+      # fmt / lint / typecheck jobs share one canonical source (the diagnostic
+      # regex is identical for lint and typecheck — see the action). Loaded from
+      # m1-ci's checkout, like install-m1-tool / collect-scripts.
       - name: Register problem matchers
-        run: |
-          set -euo pipefail
-          # Inlined (not committed-and-referenced) because a reusable workflow runs
-          # in the *caller's* checkout — m1-ci's own files are not present here.
-          # m1-fmt --check fails (exit 1) on three distinct lines, all of which a
-          # consumer needs annotated on the file (lint/typecheck annotate every
-          # diagnostic — fmt must too):
-          #   * `<file>: would reformat`                          (would-reformat)
-          #   * `m1-fmt: <file>: N syntax error(s); left unchanged` (exits 1 even
-          #     without --check — the broken-script case the user most needs
-          #     pointed at the file for)
-          #   * `<file>:<line>: warning: <message>`               (parse warning;
-          #     does not itself fail the job, but worth surfacing)
-          # GitHub keys a matcher on its single regexp array (multi-line patterns
-          # chain via line continuation), so each unrelated single-line pattern is
-          # its OWN problemMatcher entry with a distinct owner.
-          cat > "$RUNNER_TEMP/m1-matchers.json" <<'JSON'
-          {
-            "problemMatcher": [
-              {
-                "owner": "m1-fmt-check",
-                "severity": "error",
-                "pattern": [
-                  {
-                    "regexp": "^(.+):\\s+would reformat$",
-                    "file": 1,
-                    "message": 0
-                  }
-                ]
-              },
-              {
-                "owner": "m1-fmt-syntax-error",
-                "severity": "error",
-                "pattern": [
-                  {
-                    "regexp": "^m1-fmt: (.+): \\d+ syntax error\\(s\\); left unchanged$",
-                    "file": 1,
-                    "message": 0
-                  }
-                ]
-              },
-              {
-                "owner": "m1-fmt-warning",
-                "severity": "warning",
-                "pattern": [
-                  {
-                    "regexp": "^(.+):(\\d+): warning: (.+)$",
-                    "file": 1,
-                    "line": 2,
-                    "message": 3
-                  }
-                ]
-              }
-            ]
-          }
-          JSON
-          echo "::add-matcher::$RUNNER_TEMP/m1-matchers.json"
+        uses: ./.m1-ci/.github/actions/register-matchers
+        with:
+          kind: fmt
 
       - name: Collect scripts
         id: collect
@@ -261,30 +211,12 @@ jobs:
           tools-version: ${{ inputs.tools-version }}
           github-token: ${{ github.token }}
 
+      # Diagnostic matcher (file:line:col: severity[CODE]: msg), shared verbatim
+      # with the typecheck job via the register-matchers composite action.
       - name: Register problem matchers
-        run: |
-          set -euo pipefail
-          cat > "$RUNNER_TEMP/m1-matchers.json" <<'JSON'
-          {
-            "problemMatcher": [
-              {
-                "owner": "m1-diagnostic",
-                "severity": "notice",
-                "pattern": [
-                  {
-                    "regexp": "^(.+):(\\d+):(\\d+):\\s+(?:(error|warning)|(?:info|hint))\\[[^\\]]*\\]:\\s+(.+)$",
-                    "file": 1,
-                    "line": 2,
-                    "column": 3,
-                    "severity": 4,
-                    "message": 5
-                  }
-                ]
-              }
-            ]
-          }
-          JSON
-          echo "::add-matcher::$RUNNER_TEMP/m1-matchers.json"
+        uses: ./.m1-ci/.github/actions/register-matchers
+        with:
+          kind: diagnostic
 
       - name: Collect scripts
         id: collect
@@ -461,30 +393,12 @@ jobs:
           tools-version: ${{ inputs.tools-version }}
           github-token: ${{ github.token }}
 
+      # Same diagnostic matcher as the lint job — one canonical source in the
+      # register-matchers composite action (kind: diagnostic).
       - name: Register problem matchers
-        run: |
-          set -euo pipefail
-          cat > "$RUNNER_TEMP/m1-matchers.json" <<'JSON'
-          {
-            "problemMatcher": [
-              {
-                "owner": "m1-diagnostic",
-                "severity": "notice",
-                "pattern": [
-                  {
-                    "regexp": "^(.+):(\\d+):(\\d+):\\s+(?:(error|warning)|(?:info|hint))\\[[^\\]]*\\]:\\s+(.+)$",
-                    "file": 1,
-                    "line": 2,
-                    "column": 3,
-                    "severity": 4,
-                    "message": 5
-                  }
-                ]
-              }
-            ]
-          }
-          JSON
-          echo "::add-matcher::$RUNNER_TEMP/m1-matchers.json"
+        uses: ./.m1-ci/.github/actions/register-matchers
+        with:
+          kind: diagnostic
 
       - name: Collect scripts
         id: collect
