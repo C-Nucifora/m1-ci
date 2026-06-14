@@ -310,3 +310,17 @@ jobs:
       - uses: actions/checkout@v6
       - name: register-matchers emits correct fmt + diagnostic matchers
         run: ./tests/register-matchers-action.sh
+
+  # The lint-baseline input exposes m1-lint's incremental-adoption path: a
+  # project with pre-existing findings can turn the gate on and have it report
+  # only new findings. This test asserts check.yml declares the input, plumbs it
+  # to BOTH the lint gate and the SARIF render (so suppressed findings don't
+  # resurface as code-scanning alerts), documents it, and appends --baseline
+  # only when the value is non-empty.
+  self-test-lint-baseline:
+    name: Self-test (lint-baseline input plumbed and append-only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: lint-baseline input declared, plumbed to both m1-lint runs
+        run: ./tests/lint-baseline-input.sh

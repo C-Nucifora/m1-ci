@@ -123,6 +123,18 @@ on:
         description: "Fail the build on warning-severity diagnostics, not just errors. m1-lint/m1-typecheck exit 0 on warnings by default."
         type: boolean
         default: false
+      lint-baseline:
+        description: >
+          Path (relative to the caller's checkout) to an m1-lint baseline file —
+          the incremental-adoption path for a project with pre-existing findings.
+          Produce it once with `m1-lint --write-baseline <file>` and commit it;
+          this gate then passes it as `--baseline <file>`, so the Lint check
+          reports only NEW findings, not the snapshotted backlog. The baseline is
+          applied to both the lint gate and the SARIF render, so suppressed
+          pre-existing findings don't resurface as code-scanning alerts. Empty
+          (the default) gates on every finding.
+        type: string
+        default: ""
 
 env:
   CARGO_TERM_COLOR: always
@@ -229,13 +241,22 @@ jobs:
         if: steps.collect.outputs.count != '0'
         env:
           FAIL_ON_WARNING: ${{ inputs.fail-on-warning }}
+          LINT_BASELINE: ${{ inputs.lint-baseline }}
         run: |
           # Intentionally `set -uo pipefail` WITHOUT `-e`: m1-lint exits non-zero
           # on findings and that flows through the pipe; we read its status from
           # PIPESTATUS below and decide the outcome ourselves, so `-e` must not
           # abort the step before that logic runs.
           set -uo pipefail
-          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-lint | tee "$RUNNER_TEMP/m1-lint.out"
+          # Incremental adoption: when a baseline file is given, report only NEW
+          # findings (the pre-existing snapshot is suppressed). Build the flag as
+          # an array so it's omitted entirely — not passed as an empty arg — when
+          # the input is unset (the default gate-on-everything behaviour).
+          bl=()
+          if [ -n "$LINT_BASELINE" ]; then
+            bl=(--baseline "$LINT_BASELINE")
+          fi
+          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-lint "${bl[@]}" | tee "$RUNNER_TEMP/m1-lint.out"
           code=${PIPESTATUS[0]}
           if [ "$code" -ne 0 ]; then exit "$code"; fi
           if [ "$FAIL_ON_WARNING" = true ] && grep -q 'warning\[' "$RUNNER_TEMP/m1-lint.out"; then
@@ -251,8 +272,18 @@ jobs:
       - name: Render SARIF (m1-lint --format sarif)
         id: render-sarif-lint
         if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
+        env:
+          LINT_BASELINE: ${{ inputs.lint-baseline }}
         run: |
           set -uo pipefail
+          # Mirror the gate's baseline: apply the same --baseline file here so a
+          # finding the lint gate suppresses is ALSO suppressed in the SARIF
+          # uploaded to code scanning — otherwise the Security tab would resurface
+          # exactly the pre-existing backlog the baseline exists to hide.
+          bl=()
+          if [ -n "$LINT_BASELINE" ]; then
+            bl=(--baseline "$LINT_BASELINE")
+          fi
           # xargs invokes m1-lint once per batch, and its command buffer is only
           # ~128 KB (xargs --show-limits), not ARG_MAX — a large project's script
           # list crosses that and xargs runs the tool MORE THAN ONCE. Each
@@ -261,7 +292,7 @@ jobs:
           # one invalid file. Aggregate every batch's document into ONE: jq -s
           # slurps them, keeps the first's top-level shape, and concatenates
           # their `runs` arrays. jq is preinstalled on ubuntu-latest.
-          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-lint --format sarif \
+          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-lint "${bl[@]}" --format sarif \
             | jq -s '.[0] * {runs: (map(.runs) | add)}' \
             > "$RUNNER_TEMP/m1-lint.sarif"
           # m1-lint exits non-zero on findings; the SARIF document is still

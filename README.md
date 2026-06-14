@@ -49,8 +49,33 @@ with no extra configuration.
 Notable inputs (see [`check.yml`](.github/workflows/check.yml) for the full
 list and current defaults): `fail-on-warning` to also fail on
 warning-severity diagnostics, `sarif-upload` to push lint findings to GitHub
-code scanning (grant `permissions: security-events: write`), per-check
-`run-*` switches, and per-tool version overrides.
+code scanning (grant `permissions: security-events: write`), `lint-baseline`
+to gate on only *new* lint findings (the incremental-adoption path, below),
+per-check `run-*` switches, and per-tool version overrides.
+
+### Turning the lint gate on for an existing project
+
+A project with pre-existing lint findings can adopt the gate without first
+reaching zero: snapshot the current findings into a baseline once, commit it,
+and the Lint check then reports only **new** findings.
+
+```sh
+# from your project root, with the pinned m1-lint installed
+m1-lint --write-baseline .m1lint-baseline.json UQR-EV/01.00/Scripts/*.m1scr
+git add .m1lint-baseline.json
+```
+
+Then point the workflow at it:
+
+```yaml
+with:
+  scripts-path: UQR-EV/01.00/Scripts
+  lint-baseline: .m1lint-baseline.json
+```
+
+The baseline is applied to both the lint gate and the SARIF render, so
+suppressed pre-existing findings don't resurface as code-scanning alerts.
+Shrink the baseline as you fix the backlog.
 
 ## One pin, one toolchain
 
