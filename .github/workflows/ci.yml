@@ -297,3 +297,16 @@ jobs:
       - uses: actions/checkout@v6
       - name: fmt matcher covers would-reformat, syntax-error and parse-warning
         run: ./tests/fmt-matcher-syntax-error.sh
+
+  # The matcher JSON is shared via the register-matchers composite action so the
+  # fmt / lint / typecheck jobs don't inline three near-identical heredocs. This
+  # test drives the action's matcher-writing shell for both kinds, asserts each
+  # matches the real tool output, and asserts check.yml delegates to the action
+  # (no inline matcher heredoc) so the diagnostic regex can't drift between jobs.
+  self-test-register-matchers:
+    name: Self-test (register-matchers action; no inline matcher drift)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: register-matchers emits correct fmt + diagnostic matchers
+        run: ./tests/register-matchers-action.sh

@@ -1,0 +1,121 @@
+name: Register M1 problem matchers
+description: >
+  Register the GitHub Actions problem matcher(s) that turn an M1 tool's stdout
+  into inline file annotations. One `kind`:
+    * fmt        — m1-fmt --check: would-reformat, syntax-error, parse-warning
+    * diagnostic — m1-lint / m1-typecheck: `file:line:col: severity[CODE]: msg`
+
+# Shared by the fmt / lint / typecheck jobs in check.yml so the matcher JSON —
+# and especially the diagnostic-parsing regex consumed by both m1-lint and
+# m1-typecheck — lives in exactly ONE place and cannot drift between jobs. See
+# check.yml for why the reusable workflow checks this repo out before `uses:`-ing
+# this action (a reusable workflow's local `uses: ./…` paths resolve against the
+# CALLER's checkout, not m1-ci's).
+
+inputs:
+  kind:
+    description: >
+      Which matcher set to register: `fmt` (m1-fmt --check output) or
+      `diagnostic` (m1-lint / m1-typecheck `file:line:col: severity[CODE]: msg`
+      output).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Register problem matchers (${{ inputs.kind }})
+      shell: bash
+      env:
+        KIND: ${{ inputs.kind }}
+      run: |
+        set -euo pipefail
+        case "$KIND" in
+          fmt)
+            # m1-fmt --check fails (exit 1) on three distinct lines, all of which
+            # a consumer needs annotated on the file (lint/typecheck annotate
+            # every diagnostic — fmt must too):
+            #   * `<file>: would reformat`                          (would-reformat)
+            #   * `m1-fmt: <file>: N syntax error(s); left unchanged` (exits 1 even
+            #     without --check — the broken-script case the user most needs
+            #     pointed at the file for)
+            #   * `<file>:<line>: warning: <message>`               (parse warning;
+            #     does not itself fail the job, but worth surfacing)
+            # GitHub keys a matcher on its single regexp array (multi-line
+            # patterns chain via line continuation), so each unrelated single-line
+            # pattern is its OWN problemMatcher entry with a distinct owner.
+            cat > "$RUNNER_TEMP/m1-matchers.json" <<'JSON'
+        {
+          "problemMatcher": [
+            {
+              "owner": "m1-fmt-check",
+              "severity": "error",
+              "pattern": [
+                {
+                  "regexp": "^(.+):\\s+would reformat$",
+                  "file": 1,
+                  "message": 0
+                }
+              ]
+            },
+            {
+              "owner": "m1-fmt-syntax-error",
+              "severity": "error",
+              "pattern": [
+                {
+                  "regexp": "^m1-fmt: (.+): \\d+ syntax error\\(s\\); left unchanged$",
+                  "file": 1,
+                  "message": 0
+                }
+              ]
+            },
+            {
+              "owner": "m1-fmt-warning",
+              "severity": "warning",
+              "pattern": [
+                {
+                  "regexp": "^(.+):(\\d+): warning: (.+)$",
+                  "file": 1,
+                  "line": 2,
+                  "message": 3
+                }
+              ]
+            }
+          ]
+        }
+        JSON
+            ;;
+          diagnostic)
+            # m1-lint and m1-typecheck share one diagnostic line format:
+            #   <file>:<line>:<col>: <severity>[<CODE>]: <message>
+            # e.g. `Engine.m1scr:12:5: error[L010]: tabs expected`. error/warning
+            # map to GitHub's error/warning; info/hint fall through to the
+            # matcher's "notice" default. Capturing severity from the line keeps
+            # one matcher correct for all four. THIS regex is the canonical source
+            # for both jobs — change it here, not per job.
+            cat > "$RUNNER_TEMP/m1-matchers.json" <<'JSON'
+        {
+          "problemMatcher": [
+            {
+              "owner": "m1-diagnostic",
+              "severity": "notice",
+              "pattern": [
+                {
+                  "regexp": "^(.+):(\\d+):(\\d+):\\s+(?:(error|warning)|(?:info|hint))\\[[^\\]]*\\]:\\s+(.+)$",
+                  "file": 1,
+                  "line": 2,
+                  "column": 3,
+                  "severity": 4,
+                  "message": 5
+                }
+              ]
+            }
+          ]
+        }
+        JSON
+            ;;
+          *)
+            echo "::error::register-matchers: unknown kind '$KIND' (expected 'fmt' or 'diagnostic')"
+            exit 1
+            ;;
+        esac
+        echo "::add-matcher::$RUNNER_TEMP/m1-matchers.json"
