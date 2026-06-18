@@ -256,7 +256,15 @@ jobs:
           if [ -n "$LINT_BASELINE" ]; then
             bl=(--baseline "$LINT_BASELINE")
           fi
-          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-lint "${bl[@]}" | tee "$RUNNER_TEMP/m1-lint.out"
+          # m1-lint writes its human-format diagnostics to STDERR, so the
+          # capture MUST fold stderr in (2>&1) — otherwise m1-lint.out is empty
+          # and the fail-on-warning grep below never matches, silently defeating
+          # the gate on a warnings-only project. PIPESTATUS[0] still reflects
+          # m1-lint's exit, so the `code -ne 0` error gate is unchanged. The
+          # deferred fix/diff notices m1-lint also prints to stderr ("applied
+          # fixes to N of M file(s)") don't contain the `warning[` token, so the
+          # grep stays precise.
+          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-lint "${bl[@]}" 2>&1 | tee "$RUNNER_TEMP/m1-lint.out"
           code=${PIPESTATUS[0]}
           if [ "$code" -ne 0 ]; then exit "$code"; fi
           if [ "$FAIL_ON_WARNING" = true ] && grep -q 'warning\[' "$RUNNER_TEMP/m1-lint.out"; then
