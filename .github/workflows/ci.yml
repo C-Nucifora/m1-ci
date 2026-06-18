@@ -298,6 +298,22 @@ jobs:
       - name: fmt matcher covers would-reformat, syntax-error and parse-warning
         run: ./tests/fmt-matcher-syntax-error.sh
 
+  # A red Format-check job emits only `<file>: would reformat` — never the diff
+  # of what is actually wrong. On failure, the fmt job must land the unified
+  # diff (m1-fmt --diff) of every misformatted file in the log, so the fix is
+  # self-evident from the run. This test asserts check.yml's fmt job carries
+  # that guarded diff step (after the --check step, gated on failure() + a
+  # non-zero collected count, over the same script list via xargs, with
+  # `|| true` so the diff step itself stays green) so the feedback can't
+  # silently regress.
+  self-test-fmt-diff:
+    name: Self-test (fmt job surfaces a diff on failure)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: fmt job shows a reformat diff when --check fails
+        run: ./tests/fmt-check-diff.sh
+
   # The matcher JSON is shared via the register-matchers composite action so the
   # fmt / lint / typecheck jobs don't inline three near-identical heredocs. This
   # test drives the action's matcher-writing shell for both kinds, asserts each
