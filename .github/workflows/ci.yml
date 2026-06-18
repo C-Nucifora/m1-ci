@@ -43,6 +43,21 @@ jobs:
           tar -xzf actionlint.tgz actionlint
           ./actionlint -color
 
+  # Every M1 tool lives under C-Nucifora except m1-project (nedlane). That
+  # single owner override is encoded independently in three places —
+  # hooks/lib.sh tool_owner(), drift-canary.yml's repos map, and check.yml's
+  # install-m1-tool `repo:` literal — with no guard that they agree. Add a
+  # second nedlane-owned tool (or move m1-project) and miss one, and the hook,
+  # the canary, or CI silently downloads from the wrong owner. Assert the
+  # nedlane-owned tool set is identical across all three, so the map can't drift.
+  tool-owners:
+    name: tool->owner map agrees across the three sites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Assert the nedlane-owned tool set agrees
+        run: ./tests/tool-owners.sh
+
   # The local pre-commit hooks and the CI workflow must install the SAME tool
   # versions. tools.env is the single source of truth; assert check.yml's input
   # defaults match it so the two halves can never silently drift.
