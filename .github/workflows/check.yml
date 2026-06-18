@@ -192,6 +192,22 @@ jobs:
         if: steps.collect.outputs.count != '0'
         run: xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-fmt --check
 
+      # When the --check step above fails it emits only `<file>: would reformat`
+      # — THAT a file is misformatted, never WHAT is wrong (the lint/typecheck
+      # jobs annotate the exact offending lines; the fmt matcher can only point
+      # at the whole file). Land the unified diff of every misformatted file in
+      # the log so the fix is self-evident from the run, without checking the
+      # branch out and running m1-fmt locally.
+      #
+      # `|| true`: the --check step already carries the failing exit, so the
+      # job stays red on its own account; this step must not double-fail. It is
+      # also belt-and-braces — m1-fmt --diff itself exits non-zero on a syntax
+      # error (a file would-reformat exits 0 under --diff), and we don't want
+      # that to surface as *this* step's failure.
+      - name: Show reformat diff
+        if: failure() && steps.collect.outputs.count != '0'
+        run: xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-fmt --diff || true
+
   lint:
     name: Lint (m1-lint)
     if: inputs.run-lint
