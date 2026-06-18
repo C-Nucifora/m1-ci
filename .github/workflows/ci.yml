@@ -372,6 +372,22 @@ jobs:
       - name: render-sarif aggregates batches into one valid document
         run: ./tests/render-sarif-action.sh
 
+  # Project.m1prj auto-discovery must stay inside the caller's checkout and pick
+  # deterministically. The default scripts-path "." makes "$SCRIPTS_PATH/.." the
+  # workspace's PARENT on a runner, so an unclamped walk would validate a stray
+  # Project.m1prj next to the checkout (or in a sibling checkout); and
+  # `-print -quit` returned an arbitrary match in a multi-variant repo. This test
+  # asserts check.yml clamps discovery to GITHUB_WORKSPACE and reproduces the
+  # discovery shell to prove it rejects out-of-workspace files and prefers the
+  # in-repo, nearest match.
+  self-test-project-discovery:
+    name: Self-test (project discovery clamped to the checkout)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Project.m1prj discovery is workspace-clamped and deterministic
+        run: ./tests/project-discovery-clamp.sh
+
   # The fail-on-warning gate must capture m1-lint's diagnostics — which go to
   # STDERR — or it silently never fires on a warnings-only project. The
   # clean-fixture self-test (fail-on-warning: true) can't catch this: with no
