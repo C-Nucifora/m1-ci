@@ -340,3 +340,17 @@ jobs:
       - uses: actions/checkout@v6
       - name: render-sarif aggregates batches into one valid document
         run: ./tests/render-sarif-action.sh
+
+  # The fail-on-warning gate must capture m1-lint's diagnostics — which go to
+  # STDERR — or it silently never fires on a warnings-only project. The
+  # clean-fixture self-test (fail-on-warning: true) can't catch this: with no
+  # warnings, grep-on-empty correctly finds nothing. This test reproduces the
+  # gate shell against a fake m1-lint that warns on stderr and exits 0, and
+  # asserts the gate fails — and that check.yml's capture folds stderr in (2>&1).
+  self-test-lint-fail-on-warning:
+    name: Self-test (fail-on-warning captures m1-lint stderr diagnostics)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: fail-on-warning gate fires on a warnings-only project
+        run: ./tests/lint-fail-on-warning.sh
