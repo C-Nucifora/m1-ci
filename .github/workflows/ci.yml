@@ -22,7 +22,7 @@ jobs:
     name: Lint workflows
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Run actionlint
         run: |
           set -euo pipefail
@@ -54,7 +54,7 @@ jobs:
     name: tool->owner map agrees across the three sites
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Assert the nedlane-owned tool set agrees
         run: ./tests/tool-owners.sh
 
@@ -65,7 +65,7 @@ jobs:
     name: tools.env matches check.yml
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Assert pinned versions agree
         run: |
           set -euo pipefail
@@ -105,7 +105,7 @@ jobs:
     name: m1-ci-ref default matches VERSION
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Assert m1-ci-ref default == v$(cat VERSION)
         run: |
           set -euo pipefail
@@ -187,7 +187,7 @@ jobs:
     name: Self-test (local hooks pass)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Run the m1-fmt / m1-lint / m1-typecheck / m1-project hooks on the fixture
         run: |
           set -euo pipefail
@@ -222,7 +222,7 @@ jobs:
     name: Self-test (broken fixture fails)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Read pinned versions from tools.env
         id: pins
         run: |
@@ -256,7 +256,7 @@ jobs:
     name: Self-test (typecheck SARIF carries a T-code)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Read pinned versions from tools.env
         id: pins
         run: |
@@ -297,7 +297,7 @@ jobs:
     name: Self-test (SARIF render survives xargs batching)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: SARIF render aggregates xargs batches
         run: ./tests/sarif-render-batching.sh
 
@@ -309,7 +309,7 @@ jobs:
     name: Self-test (fmt matcher annotates syntax errors)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: fmt matcher covers would-reformat, syntax-error and parse-warning
         run: ./tests/fmt-matcher-syntax-error.sh
 
@@ -325,7 +325,7 @@ jobs:
     name: Self-test (fmt job surfaces a diff on failure)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: fmt job shows a reformat diff when --check fails
         run: ./tests/fmt-check-diff.sh
 
@@ -338,7 +338,7 @@ jobs:
     name: Self-test (register-matchers action; no inline matcher drift)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: register-matchers emits correct fmt + diagnostic matchers
         run: ./tests/register-matchers-action.sh
 
@@ -352,7 +352,7 @@ jobs:
     name: Self-test (lint-baseline input plumbed and append-only)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: lint-baseline input declared, plumbed to both m1-lint runs
         run: ./tests/lint-baseline-input.sh
 
@@ -368,7 +368,7 @@ jobs:
     name: Self-test (render-sarif action; no inline render drift)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: render-sarif aggregates batches into one valid document
         run: ./tests/render-sarif-action.sh
 
@@ -384,7 +384,7 @@ jobs:
     name: Self-test (project discovery clamped to the checkout)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Project.m1prj discovery is workspace-clamped and deterministic
         run: ./tests/project-discovery-clamp.sh
 
@@ -398,6 +398,6 @@ jobs:
     name: Self-test (fail-on-warning captures m1-lint stderr diagnostics)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: fail-on-warning gate fires on a warnings-only project
         run: ./tests/lint-fail-on-warning.sh

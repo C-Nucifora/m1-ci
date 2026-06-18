@@ -20,7 +20,7 @@ jobs:
   drift:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Compare tools.env pins to latest releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
