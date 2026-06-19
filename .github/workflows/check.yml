@@ -152,13 +152,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the project
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # A reusable workflow's local `uses: ./…` paths resolve against the
       # caller's checkout, not m1-ci's, so we check m1-ci out into a sibling
       # path to load its composite actions (install-m1-tool, collect-scripts).
       - name: Check out m1-ci (for composite actions)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ inputs.m1-ci-repo }}
           ref: ${{ inputs.m1-ci-ref }}
@@ -220,12 +220,12 @@ jobs:
       security-events: write
     steps:
       - name: Check out the project
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # See the fmt job: m1-ci's composite actions aren't in the caller's
       # checkout, so load them from m1-ci at the pinned ref.
       - name: Check out m1-ci (for composite actions)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ inputs.m1-ci-repo }}
           ref: ${{ inputs.m1-ci-ref }}
@@ -329,12 +329,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the project
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # See the fmt job: m1-ci's composite actions aren't in the caller's
       # checkout, so load them from m1-ci at the pinned ref.
       - name: Check out m1-ci (for composite actions)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ inputs.m1-ci-repo }}
           ref: ${{ inputs.m1-ci-ref }}
@@ -434,12 +434,12 @@ jobs:
       security-events: write
     steps:
       - name: Check out the project
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # See the fmt job: m1-ci's composite actions aren't in the caller's
       # checkout, so load them from m1-ci at the pinned ref.
       - name: Check out m1-ci (for composite actions)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ inputs.m1-ci-repo }}
           ref: ${{ inputs.m1-ci-ref }}
