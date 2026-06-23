@@ -24,6 +24,16 @@ jobs:
     with:
       scripts-path: UQR-EV/01.00/Scripts
       project-file: UQR-EV/01.00/Project.m1prj
+
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+      - run: python -m pip install -r dev-requirements.txt
+      - run: python -m scripts.validate_m1prj UQR-AV/01.00/Project.m1prj
+      - run: python -m scripts.validate_m1cfg parameters.m1cfg
+      - run: python -m scripts.validate_m1scr
 ```
 
 A ready-to-copy version lives in [`examples/check.yml`](examples/check.yml).

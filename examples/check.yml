@@ -1,6 +1,7 @@
 # Example: drop this in your M1 project as `.github/workflows/m1.yml`.
 # It calls the reusable workflow in m1-ci to format-check, lint, and type-check
-# every `.m1scr` in the project on each push and pull request.
+# every `.m1scr` in the project, and runs local XML/structure validators, on
+# each push and pull request.
 
 name: M1
 
@@ -44,3 +45,19 @@ jobs:
       # run-project-validate: true  # validate Project.m1prj structure (m1-project)
       # sarif-upload: true   # lint findings -> GitHub code scanning; the calling
       #   job must grant `permissions: security-events: write`
+
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+      - name: Install validator dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r dev-requirements.txt
+      - name: Validate Project.m1prj structure
+        run: python -m scripts.validate_m1prj UQR-AV/01.00/Project.m1prj
+      - name: Validate parameters.m1cfg schema
+        run: python -m scripts.validate_m1cfg parameters.m1cfg
+      - name: Validate all .m1scr scripts
+        run: python -m scripts.validate_m1scr
