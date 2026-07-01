@@ -38,7 +38,13 @@ runs:
       run: |
         set -euo pipefail
         # NUL-delimited so script names containing spaces are handled safely.
-        find "$SCRIPTS_PATH" -type f -name '*.m1scr' -print0 > "$RUNNER_TEMP/m1-scripts.nul"
+        # Prune the `.m1-ci` self-checkout: check.yml checks m1-ci out into
+        # `path: .m1-ci` under the caller's workspace root, so with the default
+        # scripts-path "." an unpruned walk would harvest m1-ci's own
+        # deliberately-broken fixtures (tests/fixture-bad, …) and fail the
+        # caller's CI on files that are not theirs. Callers who set a real
+        # scripts-path subdir are unaffected — .m1-ci is its sibling, never under it.
+        find "$SCRIPTS_PATH" -type d -name .m1-ci -prune -o -type f -name '*.m1scr' -print0 > "$RUNNER_TEMP/m1-scripts.nul"
         # changed-only (#22): on a PR, intersect with the files changed vs the
         # base. Any failure (shallow clone, missing base) keeps the full list —
         # never silently check less than asked without a reason on the log.

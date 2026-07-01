@@ -361,10 +361,15 @@ jobs:
             # next to the checkout, or in a sibling checkout via -maxdepth. Sort
             # the matches so a repo with several variants picks a stable one,
             # not whatever the filesystem yields first.
+            #
+            # Prune the `.m1-ci` self-checkout too: check.yml checks m1-ci out
+            # into `path: .m1-ci` under the workspace root, so with the default
+            # scripts-path "." an unpruned walk would auto-discover m1-ci's own
+            # .m1-ci/tests/fixture/Project.m1prj and validate it as the caller's.
             ws="$(realpath -m "$GITHUB_WORKSPACE")"
-            file="$(find "$SCRIPTS_PATH" -maxdepth 3 -type f -name 'Project.m1prj' -print 2>/dev/null | sort | head -n1 || true)"
+            file="$(find "$SCRIPTS_PATH" -maxdepth 3 -type d -name .m1-ci -prune -o -type f -name 'Project.m1prj' -print 2>/dev/null | sort | head -n1 || true)"
             if [ -z "$file" ]; then
-              file="$(find "$SCRIPTS_PATH/.." -maxdepth 3 -type f -name 'Project.m1prj' -print 2>/dev/null | sort | head -n1 || true)"
+              file="$(find "$SCRIPTS_PATH/.." -maxdepth 3 -type d -name .m1-ci -prune -o -type f -name 'Project.m1prj' -print 2>/dev/null | sort | head -n1 || true)"
             fi
             # Confine the candidate to the workspace; reject anything above it.
             if [ -n "$file" ]; then
