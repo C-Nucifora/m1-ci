@@ -60,7 +60,7 @@ on:
       typecheck-version:
         description: "m1-typecheck release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
-        default: "v0.42.1"
+        default: "v0.43.0"
       project-version:
         description: "m1-project release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
