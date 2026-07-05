@@ -401,3 +401,30 @@ jobs:
       - uses: actions/checkout@v7
       - name: fail-on-warning gate fires on a warnings-only project
         run: ./tests/lint-fail-on-warning.sh
+
+  # The fmt job must honour fail-on-warning like its three siblings: m1-fmt's
+  # parse warnings (`<file>:<line>: warning: <msg>`) exit 0 on their own, so
+  # without a capture+grep the fmt job silently ignored the input. This test
+  # asserts check.yml's Format-check step captures m1-fmt's output and fails on a
+  # parse warning when fail-on-warning is set (and only then).
+  self-test-fmt-fail-on-warning:
+    name: Self-test (fail-on-warning covers m1-fmt parse warnings)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: fmt job honours fail-on-warning on parse warnings
+        run: ./tests/fmt-fail-on-warning.sh
+
+  # Every check job checks m1-ci out into the caller's workspace (at .m1-ci) to
+  # load its composite actions, so a zero-config consumer (scripts-path ".")
+  # would sweep m1-ci's OWN intentionally-broken fixtures into their check and
+  # fail every run. This test reproduces that layout and asserts collect-scripts
+  # prunes the .m1-ci checkout while keeping the consumer's own scripts, and that
+  # check.yml passes exclude-dir to every collect-scripts step.
+  self-test-collect-exclude:
+    name: Self-test (collect-scripts prunes the m1-ci checkout)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: collect-scripts excludes the .m1-ci checkout for a zero-config consumer
+        run: ./tests/collect-excludes-checkout.sh

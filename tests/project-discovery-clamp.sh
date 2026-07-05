@@ -13,17 +13,24 @@
 # match in unspecified traversal order, so a repo with several Project.m1prj
 # files (multiple vehicle variants) silently validates an arbitrary one.
 #
-# The fix keeps in-repo upward discovery but:
+# The fix keeps in-repo discovery but:
 #   1. confines every candidate to $GITHUB_WORKSPACE (reject anything outside it);
-#   2. is deterministic + nearest-first: search $SCRIPTS_PATH first, and only
-#      fall back one level up (still clamped to the workspace) if nothing is
-#      found below.
+#   2. is deterministic + nearest-first: search under $SCRIPTS_PATH first, then
+#      walk UP through EVERY ancestor directory (nearest first), stopping at the
+#      workspace root — matching m1-typecheck's unbounded find_project
+#      (m1_workspace::find_upward). The earlier one-level-up fallback silently
+#      skipped nested layouts whose Project.m1prj sits several directories above
+#      scripts-path (typecheck discovered it; project-validate did not). The
+#      workspace clamp is the only intended divergence from typecheck's
+#      walk-to-filesystem-root.
 #
 # This test has two parts:
-#   1. Static: assert check.yml's Locate step clamps to GITHUB_WORKSPACE.
+#   1. Static: assert check.yml's Locate step clamps to GITHUB_WORKSPACE and
+#      walks up through ancestors (not a single one-level-up search).
 #   2. Behavioural: drive the same discovery shell and prove it (a) rejects a
-#      Project.m1prj that lives outside the workspace, and (b) prefers the
-#      in-repo (under scripts-path) file over one a level up.
+#      Project.m1prj that lives outside the workspace, (b) prefers the in-repo
+#      (under scripts-path) file over ancestors, and (c) discovers a project
+#      several levels above scripts-path (the nested layout the fix restores).
 
 set -euo pipefail
 
@@ -59,6 +66,13 @@ fi
 
 echo "ok: check.yml's Locate step clamps Project.m1prj discovery to GITHUB_WORKSPACE"
 
+# It must walk UP through ancestors (an unbounded loop to the workspace root),
+# not stop at a single level. The loop steps to the parent via dirname.
+# shellcheck disable=SC2016  # grep regex literal; the $ must stay unexpanded
+grep -q 'dirname "\$dir"' "$tmp/locate-step.txt" \
+  || fail "the Locate step does not walk up ancestors (no dirname loop) — a nested project several levels up would be skipped"
+echo "ok: check.yml's Locate step walks up through ancestors to the workspace root"
+
 # --- Part 2: behavioural ----------------------------------------------------
 #
 # Reproduce the discovery shell and assert the two properties. The shell here is
@@ -67,19 +81,29 @@ echo "ok: check.yml's Locate step clamps Project.m1prj discovery to GITHUB_WORKS
 
 discover() {
   # $1 = GITHUB_WORKSPACE, $2 = SCRIPTS_PATH (relative to the workspace).
-  # Mirrors the Locate step: search scripts-path first, then one level up,
-  # rejecting any candidate outside the workspace.
-  local GITHUB_WORKSPACE="$1" SCRIPTS_PATH="$2" file ws cand
+  # Mirrors the Locate step: search under scripts-path first, then walk UP
+  # through every ancestor (nearest first) to the workspace root, rejecting any
+  # candidate outside the workspace.
+  local GITHUB_WORKSPACE="$1" SCRIPTS_PATH="$2" file ws cand dir
   ws="$(realpath -m "$GITHUB_WORKSPACE")"
   file=""
   cd "$GITHUB_WORKSPACE" || return 1
   # Nearest first: in-repo under scripts-path.
   file="$(find "$SCRIPTS_PATH" -maxdepth 3 -type f \
     -name 'Project.m1prj' -print 2>/dev/null | sort | head -n1 || true)"
-  # Fall back one level up, still clamped to the workspace.
+  # Otherwise walk UP through every ancestor, nearest first, stopping at the
+  # workspace root (matching m1-typecheck's unbounded find_upward, clamped).
   if [ -z "$file" ]; then
-    file="$(find "$SCRIPTS_PATH/.." -maxdepth 3 -type f \
-      -name 'Project.m1prj' -print 2>/dev/null | sort | head -n1 || true)"
+    dir="$(realpath -m "$SCRIPTS_PATH")"
+    while [ -n "$dir" ]; do
+      case "$dir/" in "$ws"/*) : ;; *) break ;; esac
+      if [ -f "$dir/Project.m1prj" ]; then
+        file="$dir/Project.m1prj"
+        break
+      fi
+      [ "$dir" = "$ws" ] && break
+      dir="$(dirname "$dir")"
+    done
   fi
   # Reject anything outside the workspace.
   if [ -n "$file" ]; then
@@ -135,5 +159,17 @@ cand="$(cd "$ws" && realpath -m "$got")"
 [ "$cand" = "$(realpath -m "$ws/Project.m1prj")" ] \
   || fail "upward discovery within the workspace failed: picked '$got' ($cand), expected the repo-root Project.m1prj"
 echo "ok: a Project.m1prj one level up but inside the workspace is still discovered"
+
+# Case D: the nested layout the fix restores — a Project.m1prj SEVERAL levels
+# above scripts-path (still inside the workspace). m1-typecheck's unbounded
+# upward walk discovers it; the old one-level-up fallback silently skipped it.
+rm -rf "${ws:?}"/*
+mkdir -p "$ws/lib/UQR-EV/01.00/Scripts"
+: > "$ws/Project.m1prj"                       # workspace root, 4 levels above scripts-path
+got="$(discover "$ws" "lib/UQR-EV/01.00/Scripts")"
+cand="$(cd "$ws" && realpath -m "$got")"
+[ "$cand" = "$(realpath -m "$ws/Project.m1prj")" ] \
+  || fail "unbounded upward discovery failed for a nested layout: picked '$got' ($cand), expected the workspace-root Project.m1prj several levels up"
+echo "ok: a Project.m1prj several levels above scripts-path is discovered (nested layout)"
 
 echo "PASS: Project.m1prj discovery is clamped to the workspace and deterministic nearest-first"

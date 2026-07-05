@@ -38,7 +38,9 @@ on:
           files changed vs the PR base (faster, tighter feedback). The type
           check always sees the full tree — its cross-script analysis needs
           the whole project. Falls back to the full tree when the base can't
-          be diffed.
+          be diffed. Does NOT narrow the SARIF upload: sarif-upload always
+          renders the full project (see that input) so code scanning stays
+          complete.
         type: boolean
         default: false
       # Per-tool version pins. These default to specific release tags so that a
@@ -52,19 +54,19 @@ on:
       fmt-version:
         description: "m1-fmt release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
-        default: "v0.16.1"
+        default: "v0.17.0"
       lint-version:
         description: "m1-lint release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
-        default: "v0.23.0"
+        default: "v0.24.0"
       typecheck-version:
         description: "m1-typecheck release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
-        default: "v0.43.0"
+        default: "v0.45.0"
       project-version:
         description: "m1-project release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
-        default: "v0.10.0"
+        default: "v0.12.0"
       tools-version:
         description: "Master override (advanced). Empty (default) uses the pinned per-tool versions above. Set to 'latest' to track the newest release of every tool; a single tag forces all three (the tools are independently versioned, so a shared tag may not exist for all)."
         type: string
@@ -82,7 +84,7 @@ on:
           This default MUST equal `v$(cat VERSION)` — ci.yml's ci-ref-pin job
           enforces it, so the self-resolving ref cannot drift from the release.
         type: string
-        default: "v0.25.2"
+        default: "v0.26.0"
       m1-ci-repo:
         description: "Repo to load the composite actions from. Override for forks."
         type: string
@@ -116,7 +118,10 @@ on:
           must grant `security-events: write` (reusable workflows inherit the
           caller's permissions) and the repository must have code scanning
           available (public, or private with Advanced Security) — hence
-          opt-in, default false.
+          opt-in, default false. The SARIF always covers the FULL project even
+          when changed-files-only narrows the gate: a code-scanning category
+          replaces its prior analysis, so a partial upload would wrongly mark
+          untouched files' pre-existing alerts as fixed.
         type: boolean
         default: false
       fail-on-warning:
@@ -187,10 +192,32 @@ jobs:
         with:
           scripts-path: ${{ inputs.scripts-path }}
           changed-only: ${{ inputs.changed-files-only }}
+          # Prune the m1-ci checkout (this path) so its own broken test fixtures
+          # never enter a zero-config (scripts-path ".") consumer's check.
+          exclude-dir: .m1-ci
 
       - name: Format check (m1-fmt --check)
         if: steps.collect.outputs.count != '0'
-        run: xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-fmt --check
+        env:
+          FAIL_ON_WARNING: ${{ inputs.fail-on-warning }}
+        run: |
+          # Intentionally `set -uo pipefail` WITHOUT `-e`: m1-fmt exits non-zero
+          # on would-reformat / syntax errors and that flows through the pipe; we
+          # read its status from PIPESTATUS below and decide the outcome
+          # ourselves. Capture the output (folding stderr in, 2>&1 — like the
+          # lint / typecheck / project gates) so fail-on-warning can ALSO fire on
+          # m1-fmt's parse warnings (`<file>:<line>: warning: <msg>`), which exit
+          # 0 on their own; without this the fmt job ignored the input its three
+          # siblings honour. tee still writes to stdout, so the fmt problem
+          # matcher annotates every line exactly as before.
+          set -uo pipefail
+          xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-fmt --check 2>&1 | tee "$RUNNER_TEMP/m1-fmt.out"
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then exit "$code"; fi
+          if [ "$FAIL_ON_WARNING" = true ] && grep -qE '^.+:[0-9]+: warning: ' "$RUNNER_TEMP/m1-fmt.out"; then
+            echo "::error::fail-on-warning: m1-fmt reported parse warnings"
+            exit 1
+          fi
 
       # When the --check step above fails it emits only `<file>: would reformat`
       # — THAT a file is misformatted, never WHAT is wrong (the lint/typecheck
@@ -252,6 +279,7 @@ jobs:
         with:
           scripts-path: ${{ inputs.scripts-path }}
           changed-only: ${{ inputs.changed-files-only }}
+          exclude-dir: .m1-ci
 
       - name: Lint (m1-lint)
         if: steps.collect.outputs.count != '0'
@@ -288,11 +316,27 @@ jobs:
             exit 1
           fi
 
-      # Opt-in (#26): the same file set, re-rendered as SARIF 2.1.0 (m1-lint
+      # Opt-in (#26): the lint findings, re-rendered as SARIF 2.1.0 (m1-lint
       # --format sarif, C-Nucifora/m1-lint#109) and uploaded to GitHub code
       # scanning — Security-tab alerts, per-rule dismissal, new-alert diffing
-      # on PRs. Runs even when the lint step above failed on findings (those
-      # findings are exactly what should reach code scanning).
+      # on PRs.
+      #
+      # SARIF must cover the WHOLE project, never the changed-files-only subset.
+      # A code-scanning category REPLACES its prior analysis, so uploading a
+      # narrowed file set marks every untouched file's pre-existing alert as
+      # "fixed" on the next PR. The gate above may run on the changed subset for
+      # speed, but the SARIF is re-collected over the full tree here (changed-only
+      # defaults false) so the uploaded analysis is always complete — a no-op
+      # re-collect when changed-files-only is off. Runs even after the gate fails
+      # on findings: those findings are exactly what should reach code scanning.
+      - name: Collect scripts for SARIF (full tree)
+        id: collect-sarif
+        if: inputs.sarif-upload && !cancelled()
+        uses: ./.m1-ci/.github/actions/collect-scripts
+        with:
+          scripts-path: ${{ inputs.scripts-path }}
+          exclude-dir: .m1-ci
+
       # The SARIF aggregation + structural guard lives in the render-sarif
       # composite action so the lint and typecheck render steps share one
       # canonical source (the body was structurally identical, differing only in
@@ -303,7 +347,7 @@ jobs:
       # exactly the pre-existing backlog the baseline exists to hide.
       - name: Render SARIF (m1-lint --format sarif)
         id: render-sarif-lint
-        if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
+        if: inputs.sarif-upload && steps.collect-sarif.outputs.count != '0' && !cancelled()
         uses: ./.m1-ci/.github/actions/render-sarif
         with:
           tool: m1-lint
@@ -317,7 +361,7 @@ jobs:
       # (an `if:` with no status function gets an implicit success(), which is
       # false then), and AND the render outcome gate on top.
       - name: Upload SARIF to code scanning
-        if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled() && steps.render-sarif-lint.outcome == 'success'
+        if: inputs.sarif-upload && steps.collect-sarif.outputs.count != '0' && !cancelled() && steps.render-sarif-lint.outcome == 'success'
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ runner.temp }}/m1-lint.sarif
@@ -340,9 +384,10 @@ jobs:
           ref: ${{ inputs.m1-ci-ref }}
           path: .m1-ci
 
-      # The project file: the explicit input, or the nearest Project.m1prj
-      # found under/above scripts-path (the same project the typecheck step
-      # would auto-discover). Empty = skip (script-only repo).
+      # The project file: the explicit input, or the Project.m1prj m1-typecheck
+      # would itself auto-discover — its unbounded upward walk
+      # (m1_workspace::find_project_file / find_upward), clamped to the caller's
+      # checkout. Empty = skip (script-only repo).
       - name: Locate Project.m1prj
         id: locate
         env:
@@ -353,18 +398,34 @@ jobs:
           file="$PROJECT_FILE"
           if [ -z "$file" ]; then
             # Auto-discover deterministically and within the caller's checkout.
-            # Nearest-first: search scripts-path (the in-repo project root)
-            # first, then fall back ONE level up — but never outside
-            # GITHUB_WORKSPACE. With the default scripts-path ".", "$SCRIPTS_PATH/.."
-            # is the workspace's PARENT (on a runner /home/runner/work/<repo>),
-            # so an unclamped walk would pick up a stray Project.m1prj sitting
-            # next to the checkout, or in a sibling checkout via -maxdepth. Sort
-            # the matches so a repo with several variants picks a stable one,
-            # not whatever the filesystem yields first.
             ws="$(realpath -m "$GITHUB_WORKSPACE")"
+            # 1. Nearest-first: a Project.m1prj nested UNDER scripts-path (the
+            #    in-repo project root). Sort so a repo with several variants picks
+            #    a stable one, not whatever the filesystem yields first.
             file="$(find "$SCRIPTS_PATH" -maxdepth 3 -type f -name 'Project.m1prj' -print 2>/dev/null | sort | head -n1 || true)"
+            # 2. Otherwise walk UP from scripts-path through EVERY ancestor,
+            #    nearest first, stopping at the workspace root — matching
+            #    m1-typecheck's find_project (m1_workspace::find_upward), which
+            #    walks the script's ancestors unbounded. A previous one-level-up
+            #    search silently skipped layouts whose Project.m1prj sits several
+            #    directories above scripts-path (typecheck found it; this did
+            #    not). The workspace clamp is the only intentional divergence:
+            #    typecheck walks to the filesystem root, but on a runner
+            #    "$SCRIPTS_PATH/.." reaches /home/runner/work/<repo> — a stray
+            #    Project.m1prj next to the checkout, or a sibling checkout, must
+            #    never be validated as this project's.
             if [ -z "$file" ]; then
-              file="$(find "$SCRIPTS_PATH/.." -maxdepth 3 -type f -name 'Project.m1prj' -print 2>/dev/null | sort | head -n1 || true)"
+              dir="$(realpath -m "$SCRIPTS_PATH")"
+              while [ -n "$dir" ]; do
+                # Never look above the workspace root.
+                case "$dir/" in "$ws"/*) : ;; *) break ;; esac
+                if [ -f "$dir/Project.m1prj" ]; then
+                  file="$dir/Project.m1prj"
+                  break
+                fi
+                [ "$dir" = "$ws" ] && break
+                dir="$(dirname "$dir")"
+              done
             fi
             # Confine the candidate to the workspace; reject anything above it.
             if [ -n "$file" ]; then
@@ -465,6 +526,7 @@ jobs:
         uses: ./.m1-ci/.github/actions/collect-scripts
         with:
           scripts-path: ${{ inputs.scripts-path }}
+          exclude-dir: .m1-ci
 
       - name: Type check (m1-typecheck)
         if: steps.collect.outputs.count != '0'

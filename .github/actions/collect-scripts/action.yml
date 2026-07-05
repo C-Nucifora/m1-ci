@@ -19,6 +19,17 @@ inputs:
       non-PR events or when the base can't be fetched.
     required: false
     default: "false"
+  exclude-dir:
+    description: >
+      A directory to prune from the search (the m1-ci checkout). Every check job
+      checks m1-ci out INTO the caller's workspace to load these composite
+      actions, so with the default scripts-path "." an unpruned find would sweep
+      m1-ci's own intentionally-broken test fixtures into the caller's check and
+      fail every zero-config consumer. Pruned by real location, so it only takes
+      effect when the directory actually lies under scripts-path. Empty = prune
+      nothing.
+    required: false
+    default: ""
 
 outputs:
   count:
@@ -34,11 +45,29 @@ runs:
       env:
         SCRIPTS_PATH: ${{ inputs.scripts-path }}
         CHANGED_ONLY: ${{ inputs.changed-only }}
+        EXCLUDE_DIR: ${{ inputs.exclude-dir }}
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set -euo pipefail
         # NUL-delimited so script names containing spaces are handled safely.
-        find "$SCRIPTS_PATH" -type f -name '*.m1scr' -print0 > "$RUNNER_TEMP/m1-scripts.nul"
+        # Prune the m1-ci checkout (EXCLUDE_DIR) so ITS intentionally-broken test
+        # fixtures never enter the caller's check: every job checks m1-ci out into
+        # the caller's workspace to load these composite actions, so the default
+        # scripts-path "." would otherwise collect m1-ci's own fixture
+        # syntax-error / T-code scripts and fail every zero-config consumer.
+        sp="${SCRIPTS_PATH%/}"; [ -n "$sp" ] || sp="$SCRIPTS_PATH"
+        prune=()
+        if [ -n "${EXCLUDE_DIR:-}" ]; then
+          # Locate the exclude dir RELATIVE to the search root so the prune fires
+          # regardless of how either path is written; skip it entirely when the
+          # dir is not under scripts-path (find never descends into it anyway).
+          rel="$(realpath -m --relative-to="$sp" "$EXCLUDE_DIR")"
+          case "$rel" in
+            .. | ../*) : ;;
+            *) prune=(-path "$sp/$rel" -prune -o) ;;
+          esac
+        fi
+        find "$sp" "${prune[@]}" -type f -name '*.m1scr' -print0 > "$RUNNER_TEMP/m1-scripts.nul"
         # changed-only (#22): on a PR, intersect with the files changed vs the
         # base. Any failure (shallow clone, missing base) keeps the full list —
         # never silently check less than asked without a reason on the log.
