@@ -48,10 +48,17 @@ with no extra configuration.
 
 Notable inputs (see [`check.yml`](.github/workflows/check.yml) for the full
 list and current defaults): `fail-on-warning` to also fail on
-warning-severity diagnostics, `sarif-upload` to push lint findings to GitHub
-code scanning (grant `permissions: security-events: write`), `lint-baseline`
-to gate on only *new* lint findings (the incremental-adoption path, below),
-per-check `run-*` switches, and per-tool version overrides.
+warning-severity diagnostics (honoured by every check, `m1-fmt` included),
+`sarif-upload` to push lint findings to GitHub code scanning (grant
+`permissions: security-events: write`), `changed-files-only` to run the fmt
+and lint gates on just the PR's changed scripts, `lint-baseline` to gate on
+only *new* lint findings (the incremental-adoption path, below), per-check
+`run-*` switches, and per-tool version overrides.
+
+`changed-files-only` narrows only the fmt/lint **gates**, never the
+`sarif-upload` — the SARIF always covers the full project. A code-scanning
+category replaces its prior analysis, so a partial upload would wrongly report
+untouched files' pre-existing alerts as fixed.
 
 ### Turning the lint gate on for an existing project
 
