@@ -62,7 +62,7 @@ on:
       typecheck-version:
         description: "m1-typecheck release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
-        default: "v0.45.0"
+        default: "v0.45.1"
       project-version:
         description: "m1-project release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
@@ -84,7 +84,7 @@ on:
           This default MUST equal `v$(cat VERSION)` — ci.yml's ci-ref-pin job
           enforces it, so the self-resolving ref cannot drift from the release.
         type: string
-        default: "v0.26.0"
+        default: "v0.26.1"
       m1-ci-repo:
         description: "Repo to load the composite actions from. Override for forks."
         type: string
