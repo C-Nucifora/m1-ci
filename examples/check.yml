@@ -28,7 +28,7 @@ jobs:
       # ci-ref-pin CI job); uncomment one only to deviate from that pin:
       # fmt-version: v0.17.0
       # lint-version: v0.24.0
-      # typecheck-version: v0.45.0
+      # typecheck-version: v0.45.1
       # project-version: v0.12.0
       # tools-version: latest   # master override: track newest of every tool
       # m1-ci-ref / m1-ci-repo: only needed if you fork m1-ci or pin the
