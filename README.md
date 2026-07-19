@@ -111,6 +111,14 @@ Hooks download the pinned prebuilt binaries once (cached under
 `~/.cache/m1-ci`); hosts without a prebuilt binary build from source at the
 same pinned tag, as does CI when a release asset is unavailable.
 
+Downloaded binaries are **verified before first use**: with an authenticated
+[GitHub CLI](https://cli.github.com) the hook checks the release asset's
+GitHub build provenance (`gh attestation verify`); without one the download
+is refused with remediation steps. Set `M1_CI_ALLOW_UNVERIFIED=1` to accept
+an unverified download explicitly (loudly warned) — e.g. on an air-gapped
+mirror you trust. The source-build fallback is unaffected (it builds the
+pinned tag from source rather than executing a downloaded artifact).
+
 ## Releasing
 
 Bump [`VERSION`](VERSION) in a PR; on merge, `release.yml` cuts the matching
