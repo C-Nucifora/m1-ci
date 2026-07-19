@@ -58,6 +58,17 @@ jobs:
       - name: Assert the nedlane-owned tool set agrees
         run: ./tests/tool-owners.sh
 
+  # A downloaded hook binary must never execute unverified (#87): without an
+  # authenticated gh the hook refuses (M1_CI_ALLOW_UNVERIFIED=1 is the loud,
+  # explicit escape hatch). Hermetic: stub curl/gh, no network.
+  hook-verification:
+    name: Hooks refuse unverified downloads
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Assert unverifiable downloads are refused
+        run: ./tests/hook-verify-required.sh
+
   # The local pre-commit hooks and the CI workflow must install the SAME tool
   # versions. tools.env is the single source of truth; assert check.yml's input
   # defaults match it so the two halves can never silently drift.
@@ -189,6 +200,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Run the m1-fmt / m1-lint / m1-typecheck / m1-project hooks on the fixture
+        env:
+          # Hooks refuse unverified downloads (#87): authenticate gh so the
+          # self-test exercises the real attestation-verification path.
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           find tests/fixture -name '*.m1scr' -print0 | xargs -0 ./hooks/m1-fmt

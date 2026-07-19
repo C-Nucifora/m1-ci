@@ -91,9 +91,10 @@ ensure_tool() {
     echo "m1-ci hook: fetching ${tool} ${version} ($suffix)…" >&2
     trap 'rm -f "$dest.tmp"' INT TERM
     if curl -fsSL -o "$dest.tmp" "$url"; then
-      # Verify GitHub-native build provenance when gh is available and
-      # authenticated (mirrors the CI install action); degrade gracefully —
-      # a release predating attestation, or no gh, only warns (#23).
+      # A downloaded binary is never executed unverified (#87). With an
+      # authenticated gh, verify GitHub-native build provenance (mirrors the
+      # CI install action). Without one, REFUSE the download — the only
+      # bypass is the explicit, loudly-warned M1_CI_ALLOW_UNVERIFIED=1.
       if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
         # Classify failures (#48): a missing attestation (release predates the
         # pipeline) warns and proceeds; a REAL verification failure from an
@@ -109,6 +110,14 @@ ensure_tool() {
           trap - INT TERM
           return 1
         fi
+      elif [ "${M1_CI_ALLOW_UNVERIFIED:-}" = "1" ]; then
+        echo "m1-ci hook: WARNING: executing UNVERIFIED download of ${tool} ${version} (M1_CI_ALLOW_UNVERIFIED=1 set; no authenticated gh to verify build provenance)." >&2
+      else
+        echo "m1-ci hook: ERROR: cannot verify build provenance for ${tool} ${version}: the GitHub CLI is unavailable or unauthenticated, so the downloaded binary will not be executed." >&2
+        echo "m1-ci hook: remedies: install + authenticate the GitHub CLI (gh auth login); or build from the pinned source tag by uninstalling the prebuilt path (cargo present, no asset); or set M1_CI_ALLOW_UNVERIFIED=1 to accept the unverified download." >&2
+        rm -f "$dest.tmp"
+        trap - INT TERM
+        return 1
       fi
       chmod +x "$dest.tmp"
       mv "$dest.tmp" "$dest"
