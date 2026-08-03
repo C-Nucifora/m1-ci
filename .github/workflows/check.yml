@@ -362,7 +362,7 @@ jobs:
       # false then), and AND the render outcome gate on top.
       - name: Upload SARIF to code scanning
         if: inputs.sarif-upload && steps.collect-sarif.outputs.count != '0' && !cancelled() && steps.render-sarif-lint.outcome == 'success'
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@v4.37.4
         with:
           sarif_file: ${{ runner.temp }}/m1-lint.sarif
           category: m1-lint
@@ -573,7 +573,7 @@ jobs:
       # so a failed render doesn't trigger a masking upload-sarif error.
       - name: Upload SARIF to code scanning
         if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled() && steps.render-sarif-typecheck.outcome == 'success'
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@v4.37.4
         with:
           sarif_file: ${{ runner.temp }}/m1-typecheck.sarif
           category: m1-typecheck
