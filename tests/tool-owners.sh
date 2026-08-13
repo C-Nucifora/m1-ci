@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Regression test for the tool->owner map (#<this PR>).
 #
-# Every M1 tool lives under the C-Nucifora org EXCEPT m1-project, which lives
-# under nedlane. That single exception is encoded independently in THREE places,
+# Every M1 tool lives under the C-Nucifora org EXCEPT m1-project and m1-can,
+# which live under nedlane. Those exceptions are encoded independently in THREE places,
 # with no guard asserting they agree:
 #
 #   1. hooks/lib.sh    tool_owner()         — `m1-project) echo "nedlane"`, the

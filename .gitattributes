@@ -1,0 +1,7 @@
+# The DBC self-test fixture must reach every checkout byte-for-byte: the
+# `.m1dbc` is stored Windows-1252 (a bare 0xB0 in `°/s`) and its committed
+# export is compared against a freshly generated one. Git would otherwise
+# detect both as text and rewrite their line endings on a Windows checkout
+# (core.autocrlf), which is not what the fixture is fixing.
+tests/fixture-dbc/src/*.m1dbc -text
+tests/fixture-dbc/dbc/*.dbc -text
