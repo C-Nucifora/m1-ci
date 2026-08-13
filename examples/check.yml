@@ -30,6 +30,7 @@ jobs:
       # lint-version: v0.24.0
       # typecheck-version: v0.49.0
       # project-version: v0.13.0
+      # dbc-version: v0.1.0
       # tools-version: latest   # master override: track newest of every tool
       # m1-ci-ref / m1-ci-repo: only needed if you fork m1-ci or pin the
       #   workflow at a different tag than its composite-action default.
@@ -42,5 +43,9 @@ jobs:
       # run-lint: true
       # run-typecheck: true
       # run-project-validate: true  # validate Project.m1prj structure (m1-project)
+      # run-dbc-export-check: false  # are the committed .dbc exports still in
+      #   sync with their .m1dbc sources (m1-dbc export --check)? Opt-in: turn it
+      #   on if you commit .dbc exports and configure them in the `[dbc]` section
+      #   of your m1-tools.toml. Without that section it is a clean no-op.
       # sarif-upload: true   # lint findings -> GitHub code scanning; the calling
       #   job must grant `permissions: security-events: write`
