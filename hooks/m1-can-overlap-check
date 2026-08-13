@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# pre-commit hook: m1-can inspect — do two CAN messages share an identifier on
+# the SAME bus? CAN ids are scoped per bus, so a repeated id is only a clash
+# when both modules were bound to the same bus by their DBC.<Name>.Init(<bus>)
+# call; reuse across different buses is legitimate and must not fail.
+#
+# `inspect` is an analysis verb: it emits JSON and exits 0 whatever it finds,
+# so the verdict is applied here.
+#   same-bus       -> a real clash. Fails.
+#   different-bus  -> proven safe. Passes.
+#   unknown        -> at least one bus has no value the project knows
+#                     (uninitialised, or a symbol carrying no resolvable
+#                     value). Reported, not failed: it cannot be proven either
+#                     way, and failing would gate on absence of evidence.
+#
+# Uninitialised DBC modules are deliberately NOT re-reported here: that is M1
+# Build Error 1375, already gated by m1-typecheck T107. One finding, one owner.
+#
+# `inspect` needs the project, which cannot be inferred from staged filenames,
+# so consumers pass it:  args: [--project, <path>/Project.m1prj]
+set -euo pipefail
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+bin="$(ensure_tool m1-can)"
+
+report="$(mktemp)"
+trap 'rm -f "$report"' EXIT
+"$bin" inspect "$@" >"$report"
+
+# pre-commit is a Python tool, so python3 is always present where hooks run.
+python3 - "$report" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    data = json.load(fh)
+
+overlaps = data.get("id_overlaps") or []
+
+
+def describe(overlap):
+    ident = overlap.get("can_id_hex") or overlap.get("can_id")
+    head = "  id {} on bus {}".format(ident, overlap.get("bus"))
+    if overlap.get("depends_on_calibration"):
+        head += "  [rests on a parameters.m1cfg value - a retune can change it]"
+    lines = [head]
+    for msg in overlap.get("messages") or []:
+        lines.append("      {} {}  (module {}, bus {})".format(
+            msg.get("direction", ""), msg.get("path"),
+            msg.get("module"), msg.get("bus")))
+    return "\n".join(lines)
+
+
+clashes = [o for o in overlaps if o.get("verdict") == "same-bus"]
+unknowns = [o for o in overlaps if o.get("verdict") == "unknown"]
+
+for overlap in unknowns:
+    print("WARN  CAN id reuse that cannot be proven safe "
+          "(a bus the project has no value for):")
+    print(describe(overlap))
+
+if clashes:
+    print("INVALID: {} CAN identifier(s) reused on the SAME bus:".format(
+        len(clashes)))
+    for overlap in clashes:
+        print(describe(overlap))
+    print("Two messages cannot share an id on one bus. Change an id, or bind "
+          "a module to a different bus in its DBC.<Name>.Init call.")
+    sys.exit(1)
+
+safe = len([o for o in overlaps if o.get("verdict") == "different-bus"])
+extra = " ({} id(s) reused across different buses - legitimate)".format(
+    safe) if safe else ""
+print("CAN ids OK: {} messages, no same-bus clashes{}.".format(
+    data.get("total_messages", "?"), extra))
+PY
