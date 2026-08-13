@@ -40,6 +40,7 @@ instead of revealing failures one at a time:
 | Lint | `m1-lint` | an error-severity lint fires (or a syntax error) |
 | Type check | `m1-typecheck` | an error-severity type diagnostic fires |
 | Project validation | `m1-project validate` | an error-level structural finding in `Project.m1prj` (skips silently when no project file exists) |
+| DBC export check (opt-in, `run-dbc-export-check`) | `m1-dbc export --check` | a committed `.dbc` export has gone stale against its `.m1dbc` source (no-op when `m1-tools.toml` has no `[dbc]` section) |
 
 Diagnostics land as **inline annotations** on the pull request, on their
 exact lines. If a `parameters.m1cfg` sits beside your `Project.m1prj`, the
@@ -105,7 +106,27 @@ repos:
       - id: m1-lint
       - id: m1-typecheck
       - id: m1-project-validate
+      - id: m1-dbc-export-check
 ```
+
+| Hook | Runs | Triggers on |
+|------|------|-------------|
+| `m1-fmt` | `m1-fmt --check` | `*.m1scr` |
+| `m1-lint` | `m1-lint` | `*.m1scr` |
+| `m1-typecheck` | `m1-typecheck` | `*.m1scr` |
+| `m1-project-validate` | `m1-project validate --project` | `Project.m1prj` |
+| `m1-dbc-export-check` | `m1-dbc export --check` | `*.m1dbc`, `*.dbc` |
+
+`m1-dbc-export-check` catches a `.m1dbc` edited without regenerating its
+committed Vector `.dbc` export. It passes no filenames: the run is whole-config,
+driven by the `[dbc]` section of the `m1-tools.toml` found by walking up from
+the working directory, and `--check` writes nothing into your tree (it
+generates into a temp dir and compares). Exit codes mirror the CLI — `0` in
+sync, `1` an export is stale (run `m1-dbc export` and commit), `2` the config
+or a file could not be read. A repo whose `m1-tools.toml` has no `[dbc]`
+section — or that has no `m1-tools.toml` at all — is a **clean no-op**, so the
+hook is safe to enable everywhere, including in repos that ship no CAN
+databases.
 
 Hooks download the pinned prebuilt binaries once (cached under
 `~/.cache/m1-ci`); hosts without a prebuilt binary build from source at the

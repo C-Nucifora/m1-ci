@@ -67,6 +67,10 @@ on:
         description: "m1-project release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
         default: "v0.13.0"
+      dbc-version:
+        description: "m1-dbc release to install: a tag like 'vX.Y.Z', or 'latest'."
+        type: string
+        default: "v0.1.0"
       tools-version:
         description: "Master override (advanced). Empty (default) uses the pinned per-tool versions above. Set to 'latest' to track the newest release of every tool; a single tag forces all three (the tools are independently versioned, so a shared tag may not exist for all)."
         type: string
@@ -110,6 +114,18 @@ on:
           Skips silently when no project file exists (script-only repos).
         type: boolean
         default: true
+      run-dbc-export-check:
+        description: >
+          Check the committed Vector `.dbc` exports are still in sync with
+          their `.m1dbc` sources (`m1-dbc export --check`) — it catches a
+          `.m1dbc` edited without regenerating the export. Opt-in (default
+          false) because not every project commits `.dbc` exports; a repo whose
+          `m1-tools.toml` has no `[dbc]` section is a clean no-op, so enabling
+          it is harmless either way. Configuration is entirely that `[dbc]`
+          section (src_dir / out_dir / the stem pairs) — there is no path input
+          to set here.
+        type: boolean
+        default: false
       sarif-upload:
         description: >
           Additionally emit m1-lint and m1-typecheck findings as SARIF (one
@@ -577,3 +593,47 @@ jobs:
         with:
           sarif_file: ${{ runner.temp }}/m1-typecheck.sarif
           category: m1-typecheck
+
+  dbc-export-check:
+    name: DBC export check (m1-dbc)
+    # Opt-in: not every project commits .dbc exports (see run-dbc-export-check).
+    if: inputs.run-dbc-export-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the project
+        uses: actions/checkout@v7
+
+      # See the fmt job: m1-ci's composite actions aren't in the caller's
+      # checkout, so load them from m1-ci at the pinned ref.
+      - name: Check out m1-ci (for composite actions)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.m1-ci-repo }}
+          ref: ${{ inputs.m1-ci-ref }}
+          path: .m1-ci
+
+      - name: Install m1-dbc
+        uses: ./.m1-ci/.github/actions/install-m1-tool
+        with:
+          tool: m1-dbc
+          version: ${{ inputs.dbc-version }}
+          tools-version: ${{ inputs.tools-version }}
+          github-token: ${{ github.token }}
+
+      # No scripts-path / project-file here on purpose: m1-dbc takes no path
+      # argument. It finds the [dbc] section by walking up from the working
+      # directory, which is the caller's checkout root — where the workspace
+      # m1-tools.toml lives (src_dir/out_dir are relative to it).
+      - name: DBC export check (m1-dbc export --check)
+        run: |
+          # No `-e`: m1-dbc exits 1 on drift and 2 on a config/IO/parse error,
+          # and we surface an annotation naming which before propagating.
+          set -uo pipefail
+          m1-dbc export --check
+          code=$?
+          case "$code" in
+            0) ;;
+            1) echo "::error::a committed .dbc export is out of sync with its .m1dbc source — run 'm1-dbc export' and commit the result" ;;
+            *) echo "::error::m1-dbc could not read the [dbc] config, a source, or a generated export (exit $code) — nothing about 'in sync' can be trusted" ;;
+          esac
+          exit "$code"

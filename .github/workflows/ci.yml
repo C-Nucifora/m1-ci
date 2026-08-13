@@ -103,6 +103,7 @@ jobs:
           check lint "$M1_LINT_VERSION"
           check typecheck "$M1_TYPECHECK_VERSION"
           check project "$M1_PROJECT_VERSION"
+          check dbc "$M1_DBC_VERSION"
           exit "$fail"
 
   # The `m1-ci-ref` input default in check.yml is the tag at which a consuming
@@ -190,6 +191,7 @@ jobs:
           check lint "$M1_LINT_VERSION"
           check typecheck "$M1_TYPECHECK_VERSION"
           check project "$M1_PROJECT_VERSION"
+          check dbc "$M1_DBC_VERSION"
           exit "$fail"
 
   # The local hooks must actually run the pinned binaries against the clean
@@ -210,6 +212,33 @@ jobs:
           find tests/fixture -name '*.m1scr' -print0 | xargs -0 ./hooks/m1-lint
           find tests/fixture -name '*.m1scr' -print0 | xargs -0 ./hooks/m1-typecheck
           ./hooks/m1-project-validate tests/fixture/Project.m1prj
+      # m1-dbc is configured by the [dbc] section of the m1-tools.toml above the
+      # working directory, not by arguments, so its hook is exercised from
+      # INSIDE the dbc fixture (which carries the config, the .m1dbc source and
+      # its committed export) rather than from the repo root. Absolute path: the
+      # hook resolves lib.sh/tools.env from its own location, but $0 must still
+      # be findable from the fixture directory.
+      - name: Run the m1-dbc hook on the in-sync dbc fixture
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: tests/fixture-dbc
+        run: |
+          set -euo pipefail
+          "$GITHUB_WORKSPACE/hooks/m1-dbc-export-check"
+      # The complement: a drifted export must FAIL the hook (exit 1). Corrupt a
+      # copy of the fixture, never the committed one.
+      - name: Assert a drifted export is rejected
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          cp -r tests/fixture-dbc "$RUNNER_TEMP/fixture-dbc-drift"
+          printf 'CM_ "drift";\n' >> "$RUNNER_TEMP/fixture-dbc-drift/dbc/Sample.dbc"
+          if (cd "$RUNNER_TEMP/fixture-dbc-drift" && "$GITHUB_WORKSPACE/hooks/m1-dbc-export-check"); then
+            echo "::error::m1-dbc accepted a drifted export — the gate is not failing as it should"
+            exit 1
+          fi
+          echo "Drifted export correctly rejected by m1-dbc export --check."
 
   # Dogfood: run the reusable workflow against the clean fixture project. It must
   # pass — proving the end-to-end install + fmt/lint/typecheck/project-validate
@@ -225,6 +254,12 @@ jobs:
       project-file: tests/fixture/Project.m1prj
       fail-on-warning: true
       sarif-upload: true
+      # Exercises the opt-in DBC job's install + no-op path: this repo has no
+      # workspace m1-tools.toml, so `m1-dbc export --check` at the checkout root
+      # must exit 0 ("nothing to export"). The drift/in-sync behaviour against a
+      # real [dbc] config is covered by the hook self-test above, which runs
+      # inside tests/fixture-dbc.
+      run-dbc-export-check: true
       # Dogfood THIS commit's composite actions, not the released default tag —
       # otherwise the self-test would validate the last release, not the PR.
       m1-ci-repo: ${{ github.repository }}
