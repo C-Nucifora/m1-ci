@@ -115,7 +115,7 @@ repos:
 | `m1-lint` | `m1-lint` | `*.m1scr` |
 | `m1-typecheck` | `m1-typecheck` | `*.m1scr` |
 | `m1-project-validate` | `m1-project validate --project` | `Project.m1prj` |
-| `m1-dbc-export-check` | `m1-dbc export --check` | `*.m1dbc`, `*.dbc` |
+| `m1-dbc-export-check` | `m1-dbc export --check` | `*.m1dbc`, `*.dbc`, `m1-tools.toml` |
 
 `m1-dbc-export-check` catches a `.m1dbc` edited without regenerating its
 committed Vector `.dbc` export. It passes no filenames: the run is whole-config,
