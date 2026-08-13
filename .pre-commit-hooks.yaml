@@ -38,3 +38,10 @@
   entry: hooks/m1-project-validate
   language: script
   files: (^|/)Project\.m1prj$
+- id: m1-dbc-export-check
+  name: m1-dbc export --check (.dbc exports in sync)
+  description: Check the committed Vector .dbc exports are in sync with their MoTeC .m1dbc sources (m1-dbc export --check).
+  entry: hooks/m1-dbc
+  language: script
+  files: \.(m1dbc|dbc)$
+  pass_filenames: false

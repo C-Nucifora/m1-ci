@@ -67,6 +67,10 @@ on:
         description: "m1-project release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
         default: "v0.13.0"
+      dbc-version:
+        description: "m1-dbc release to install: a tag like 'vX.Y.Z', or 'latest'."
+        type: string
+        default: "v0.1.0"
       tools-version:
         description: "Master override (advanced). Empty (default) uses the pinned per-tool versions above. Set to 'latest' to track the newest release of every tool; a single tag forces all three (the tools are independently versioned, so a shared tag may not exist for all)."
         type: string
@@ -108,6 +112,14 @@ on:
           SelectedTrigger references). Uses `project-file` when set, otherwise
           auto-discovers a Project.m1prj under scripts-path's project root.
           Skips silently when no project file exists (script-only repos).
+        type: boolean
+        default: true
+      run-dbc-check:
+        description: >
+          Check the committed Vector .dbc exports are in sync with their MoTeC
+          .m1dbc sources (`m1-dbc export --check`). Configured entirely by the
+          [dbc] section of the repo's m1-tools.toml; a repo without one is a
+          clean no-op, so this is safe to leave enabled.
         type: boolean
         default: true
       sarif-upload:
@@ -577,3 +589,50 @@ jobs:
         with:
           sarif_file: ${{ runner.temp }}/m1-typecheck.sarif
           category: m1-typecheck
+
+  dbc-check:
+    name: DBC exports in sync (m1-dbc)
+    if: inputs.run-dbc-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the project
+        uses: actions/checkout@v7
+
+      # See the fmt job: m1-ci's composite actions aren't in the caller's
+      # checkout, so load them from m1-ci at the pinned ref.
+      - name: Check out m1-ci (for composite actions)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.m1-ci-repo }}
+          ref: ${{ inputs.m1-ci-ref }}
+          path: .m1-ci
+
+      - name: Install m1-dbc
+        uses: ./.m1-ci/.github/actions/install-m1-tool
+        with:
+          tool: m1-dbc
+          version: ${{ inputs.dbc-version }}
+          tools-version: ${{ inputs.tools-version }}
+          repo: C-Nucifora/m1-dbc
+          github-token: ${{ github.token }}
+
+      # m1-dbc takes no paths: it reads the [dbc] section of the repo's
+      # m1-tools.toml. No [dbc] section (or no m1-tools.toml) exits 0.
+      # Exit 1 = a stale export (regenerate and commit); exit 2 = a broken
+      # config or unreadable source, which is a different fix.
+      - name: Check exports (m1-dbc export --check)
+        run: |
+          set -uo pipefail
+          m1-dbc export --check | tee "$RUNNER_TEMP/m1-dbc.out"
+          code=${PIPESTATUS[0]}
+          while IFS= read -r line; do
+            case "$line" in
+              *"!! "*) echo "::error::${line#*!! }" ;;
+            esac
+          done < "$RUNNER_TEMP/m1-dbc.out"
+          case "$code" in
+            0) ;;
+            1) echo "::error::m1-dbc: a committed .dbc export is stale — run 'm1-dbc export' and commit the result" ;;
+            *) echo "::error::m1-dbc: could not read the config or a source file (exit $code)" ;;
+          esac
+          exit "$code"

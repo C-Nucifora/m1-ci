@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# pre-commit hook: are the committed .dbc exports still in sync with their
+# .m1dbc sources? m1-dbc is configured entirely by the [dbc] section of the
+# repo's m1-tools.toml (found by the usual walk-up), so it takes no paths and
+# the staged filenames are not passed to it — the check is whole-config.
+# A repo with no [dbc] section is a clean no-op, so this hook is safe to
+# enable everywhere. --check writes nothing into the working tree.
+set -euo pipefail
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+bin="$(ensure_tool m1-dbc)"
+exec "$bin" export --check

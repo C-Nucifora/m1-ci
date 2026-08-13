@@ -103,6 +103,7 @@ jobs:
           check lint "$M1_LINT_VERSION"
           check typecheck "$M1_TYPECHECK_VERSION"
           check project "$M1_PROJECT_VERSION"
+          check dbc "$M1_DBC_VERSION"
           exit "$fail"
 
   # The `m1-ci-ref` input default in check.yml is the tag at which a consuming
