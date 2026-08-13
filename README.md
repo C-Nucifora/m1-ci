@@ -40,6 +40,7 @@ instead of revealing failures one at a time:
 | Lint | `m1-lint` | an error-severity lint fires (or a syntax error) |
 | Type check | `m1-typecheck` | an error-severity type diagnostic fires |
 | Project validation | `m1-project validate` | an error-level structural finding in `Project.m1prj` (skips silently when no project file exists) |
+| DBC exports | `m1-dbc export --check` | a committed `.dbc` export is stale against its `.m1dbc` source (no-op when the repo has no `[dbc]` config) |
 
 Diagnostics land as **inline annotations** on the pull request, on their
 exact lines. If a `parameters.m1cfg` sits beside your `Project.m1prj`, the
@@ -105,6 +106,7 @@ repos:
       - id: m1-lint
       - id: m1-typecheck
       - id: m1-project-validate
+      - id: m1-dbc-export-check   # optional: only if you commit .dbc exports
 ```
 
 Hooks download the pinned prebuilt binaries once (cached under
