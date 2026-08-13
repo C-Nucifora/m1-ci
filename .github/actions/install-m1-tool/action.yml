@@ -1,6 +1,6 @@
 name: Install an M1 tool
 description: >
-  Install one C-Nucifora M1 tool (m1-fmt / m1-lint / m1-typecheck) from its
+  Install one M1 tool from its
   prebuilt release binary, verifying GitHub-native build provenance before
   trusting it; falls back to building from source when no release asset exists.
   The installed binary is placed on PATH at $HOME/.local/bin.
@@ -11,7 +11,7 @@ description: >
 
 inputs:
   tool:
-    description: "Tool/crate name, e.g. m1-fmt, m1-lint, m1-typecheck."
+    description: "Tool/crate name, e.g. m1-fmt, m1-typecheck, m1-can."
     required: true
   version:
     description: "Release tag to install (e.g. 'v0.6.0'), or 'latest'."

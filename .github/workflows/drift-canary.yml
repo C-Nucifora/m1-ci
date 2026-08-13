@@ -33,17 +33,17 @@ jobs:
             [m1-lint]="C-Nucifora/m1-lint"
             [m1-typecheck]="C-Nucifora/m1-typecheck"
             [m1-project]="nedlane/m1-project"
-            [m1-dbc]="C-Nucifora/m1-dbc"
+            [m1-can]="nedlane/m1-can"
           )
           declare -A pins=(
             [m1-fmt]="$M1_FMT_VERSION"
             [m1-lint]="$M1_LINT_VERSION"
             [m1-typecheck]="$M1_TYPECHECK_VERSION"
             [m1-project]="$M1_PROJECT_VERSION"
-            [m1-dbc]="$M1_DBC_VERSION"
+            [m1-can]="$M1_CAN_VERSION"
           )
           stale=""
-          for tool in m1-fmt m1-lint m1-typecheck m1-project m1-dbc; do
+          for tool in m1-fmt m1-lint m1-typecheck m1-project m1-can; do
             latest=$(gh api "repos/${repos[$tool]}/releases/latest" --jq .tag_name)
             pinned="${pins[$tool]}"
             if [ "$latest" != "$pinned" ]; then

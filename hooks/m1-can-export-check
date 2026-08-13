@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pre-commit hook: m1-dbc export --check — are the committed Vector .dbc
+# pre-commit hook: m1-can export --check — are the committed Vector .dbc
 # exports still in sync with their .m1dbc sources? The verb takes no file
 # arguments: it reads the [dbc] section of the m1-tools.toml found by walking
 # up from the working directory, so the hook passes no filenames
@@ -8,5 +8,5 @@
 # exports no DBCs is a clean no-op), 1 drift, 2 a config/IO/parse error.
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-bin="$(ensure_tool m1-dbc)"
+bin="$(ensure_tool m1-can)"
 exec "$bin" export --check

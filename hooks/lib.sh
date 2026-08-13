@@ -17,11 +17,12 @@ REPO_DIR="$(cd "$HOOKS_DIR/.." && pwd)"
 CACHE_DIR="${M1_CI_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/m1-ci/bin}"
 
 # Owner of a tool's GitHub repo. Every tool lives under C-Nucifora except
-# m1-project (nedlane) — the release-download/attestation/source URLs are
+# m1-project and m1-can (nedlane) — the release-download/attestation/source URLs are
 # per-tool for that reason.
 tool_owner() {
   case "$1" in
     m1-project) echo "nedlane" ;;
+    m1-can) echo "nedlane" ;;
     *) echo "C-Nucifora" ;;
   esac
 }

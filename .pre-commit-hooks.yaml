@@ -11,7 +11,7 @@
 #         - id: m1-lint
 #         - id: m1-typecheck
 #         - id: m1-project-validate
-#         - id: m1-dbc-export-check
+#         - id: m1-can-export-check
 #
 # Each hook downloads (once, cached) the pinned tool binary named in tools.env —
 # the same version CI installs — so there is nothing to install by hand.
@@ -39,13 +39,15 @@
   entry: hooks/m1-project-validate
   language: script
   files: (^|/)Project\.m1prj$
-- id: m1-dbc-export-check
-  name: m1-dbc export --check
-  description: Check the committed Vector .dbc exports are in sync with their .m1dbc sources (m1-dbc export --check).
-  entry: hooks/m1-dbc-export-check
+- id: m1-can-export-check
+  name: m1-can export --check
+  description: Check the committed Vector .dbc exports are in sync with their .m1dbc sources (m1-can export --check).
+  entry: hooks/m1-can-export-check
   language: script
-  files: \.(m1dbc|dbc)$
-  # m1-dbc takes NO filename arguments: the run is whole-config, driven by the
+  files: (\.(m1dbc|dbc)$|(^|/)m1-tools\.toml$)
+  # The config is a trigger because changing [dbc] can repoint an export without
+  # touching either database file.
+  # m1-can takes NO filename arguments: the run is whole-config, driven by the
   # [dbc] section of the m1-tools.toml found by walking up from the working
   # directory. `files` only decides WHETHER the hook runs on this commit; the
   # names must not be appended to the command line (the binary would reject

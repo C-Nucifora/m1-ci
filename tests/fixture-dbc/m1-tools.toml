@@ -1,6 +1,6 @@
-# Self-test fixture for the m1-dbc-export-check hook: one .m1dbc source in
+# Self-test fixture for the m1-can-export-check hook: one .m1dbc source in
 # src/, its committed Vector export in dbc/, and the [dbc] section that pairs
-# them. `m1-dbc export --check` run from this directory must pass; corrupt
+# them. `m1-can export --check` run from this directory must pass; corrupt
 # dbc/Sample.dbc and it must fail. The section is invisible to the other tools'
 # m1-tools.toml schema, so it disturbs nothing else.
 [dbc]
