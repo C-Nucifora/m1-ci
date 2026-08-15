@@ -66,4 +66,12 @@
   # inspect needs --project, which cannot be inferred from the staged names, so
   # the consumer supplies it: args: [--project, <path>/Project.m1prj]
   pass_filenames: false
+- id: m1-project-normalize
+  name: normalise M1 Build's per-save project stamps
+  description: Rewrite Project@BuildNumber, MoTeCM1BuildSession@ProductVersion and the Locale attributes back to the committed baseline in m1-tools.toml [project-baseline].
+  entry: hooks/m1-project-normalize
+  language: script
+  # The files M1 Build stamps on save. Filenames ARE passed: unlike the CAN
+  # hooks this is per-file, and only the staged ones should be rewritten.
+  files: \.(m1prj|m1cfg|m1dls)$
 

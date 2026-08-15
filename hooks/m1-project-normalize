@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# pre-commit hook: normalise the per-save noise M1 Build stamps into project
+# files, so it never reaches a commit in the first place.
+#
+# Every save, M1 Build rewrites:
+#   Project@BuildNumber                     - incremented on each build
+#   MoTeCM1BuildSession@ProductVersion      - the building machine's M1 Build
+#   Locale attributes                       - the building machine's language
+# Committed files must sit at a fixed baseline instead, so a diff shows real
+# work rather than whose laptop saved last, and so the numbered snapshot
+# directories M1 Build writes alongside stay low rather than climbing forever.
+#
+# Pins come from the consumer's m1-tools.toml, which is also what CI asserts:
+#
+#     [project-baseline]
+#     product_version = "1.4.4.981"                # MoTeCM1BuildSession
+#     file_format     = "10108"                    # Project@FileFormat
+#     locale          = "English_Australia.1252"   # optional; this is the default
+#
+# The project version itself is policy rather than config: 1.00, build 0.
+# A repo with no [project-baseline] section is a clean no-op.
+#
+# System@Version* is deliberately NOT normalised. Those move only when someone
+# deliberately selects a different firmware package — a reviewable change, not
+# per-save churn — and the two firmware repos legitimately differ (…0107 vs
+# …0108). The retired Python hook pinned them to one repo's values, which
+# silently reverted the other's.
+#
+# Follows the pre-commit fixer convention: it rewrites the files and exits 1 so
+# you see the change and re-stage it. It never runs `git add` itself — the
+# retired hook that did could clobber a partially staged commit.
+set -euo pipefail
+
+config="m1-tools.toml"
+[ -f "$config" ] || exit 0
+grep -q '^\[project-baseline\]' "$config" || exit 0
+
+value_of() {
+  sed -n "s/^$1[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$config" | head -n1
+}
+
+product_version="$(value_of product_version)"
+file_format="$(value_of file_format)"
+locale="$(value_of locale)"
+: "${locale:=English_Australia.1252}"
+
+if [ -z "$product_version" ] || [ -z "$file_format" ]; then
+  echo "m1-project-normalize: [project-baseline] needs product_version and file_format" >&2
+  exit 2
+fi
+
+# Anchored exactly like the CI assertion: MoTeCM1BuildSession, and the one
+# <Project> element carrying FileFormat. Revision-history entries such as
+# <Project Name="AV24" … Build="9"> and <File … BuildNumber=…> also carry
+# version attributes and must never be rewritten, which is what the
+# FileFormat lookahead excludes.
+prog='
+  s{<MoTeCM1BuildSession\b[^>]*?ProductVersion="\K[^"]*}{'"$product_version"'};
+  s{<MoTeCM1BuildSession\b[^>]*?Locale="\K[^"]*}{'"$locale"'};
+  s{<Project\b(?=[^>]*?FileFormat=)[^>]*?FileFormat="\K[^"]*}{'"$file_format"'};
+  s{<Project\b(?=[^>]*?FileFormat=)[^>]*?VersionMajor="\K[^"]*}{1};
+  s{<Project\b(?=[^>]*?FileFormat=)[^>]*?VersionMinor="\K[^"]*}{0};
+  s{<Project\b(?=[^>]*?FileFormat=)[^>]*?BuildNumber="\K[^"]*}{0};
+  s{<LogSetup\b[^>]*?Locale="\K[^"]*}{'"$locale"'};
+  s{<Configuration\b[^>]*?Locale="\K[^"]*}{'"$locale"'};
+'
+
+changed=""
+for file in "$@"; do
+  [ -f "$file" ] || continue
+  before="$(mktemp)"
+  cp "$file" "$before"
+  perl -0777 -pi -e "$prog" "$file"
+  cmp -s "$before" "$file" || changed="$changed $file"
+  rm -f "$before"
+done
+
+[ -z "$changed" ] && exit 0
+
+echo "Normalised M1 Build's per-save stamps back to the committed baseline"
+echo "  (project version 1.00 build 0, ProductVersion $product_version,"
+echo "   FileFormat $file_format, Locale $locale):"
+for file in $changed; do
+  echo "    $file"
+done
+echo
+echo "Review the change and stage it, then commit again:"
+# shellcheck disable=SC2086
+echo "    git add$changed"
+exit 1
