@@ -1,45 +1,47 @@
 #!/usr/bin/env bash
-# pre-commit hook: normalise the per-save noise M1 Build stamps into project
-# files, so it never reaches a commit in the first place.
+# pre-commit hook: keep M1 Build's per-save noise out of commits, and make any
+# real toolchain change a deliberate, reviewed decision.
 #
-# Every save, M1 Build rewrites:
-#   Project@BuildNumber                     - incremented on each build
-#   MoTeCM1BuildSession@ProductVersion      - the building machine's M1 Build
-#   Locale attributes                       - the building machine's language
-# Committed files must sit at a fixed baseline instead, so a diff shows real
-# work rather than whose laptop saved last, and so the numbered snapshot
-# directories M1 Build writes alongside stay low rather than climbing forever.
+# Two categories, treated differently on purpose:
 #
-# Pins come from the consumer's m1-tools.toml, which is also what CI asserts:
+#   NORMALISED (rewritten, then the commit stops so you review and re-stage)
+#     Project@BuildNumber        - increments on every build; the M1 Build
+#                                  manual calls it the revision counter.
+#     Project@VersionMajor/Minor - project identity; policy is 1.00.
+#     *@Locale                   - the building machine's language setting.
+#
+#   ASSERTED (never rewritten; a mismatch stops the commit and asks for a pin
+#             bump)
+#     MoTeCM1BuildSession@ProductVersion - which M1 Build wrote the file
+#     Project@FileFormat                 - the file's actual serialisation
+#     System@*                           - the selected firmware package
+#
+# The split matters. Those three are FACTS about the toolchain that produced
+# the file, not noise, and rewriting them fabricates history: forcing
+# FileFormat backwards labels a converted file as the old format, and forcing
+# ProductVersion backwards yields a file claiming M1 Build 1.4.4.981 wrote a
+# 10109-format project, which it cannot have. Rewriting System@ silently
+# reverts a deliberate firmware-package change - the exact bug in the retired
+# Python hook this replaces. Asserting all three means the pins and the files
+# can never disagree, so an impossible combination cannot be committed.
+#
+# Pins live in the consumer's m1-tools.toml, which CI asserts by running this
+# same hook:
 #
 #     [project-baseline]
-#     product_version = "1.4.4.981"                # MoTeCM1BuildSession
-#     file_format     = "10108"                    # Project@FileFormat (asserted,
-#                                                  #   never rewritten - see below)
-#     locale          = "English_Australia.1252"   # optional; this is the default
+#     product_version = "1.4.5.556"                # asserted
+#     file_format     = "10109"                    # asserted
+#     locale          = "English_Australia.1252"   # normalised; optional
 #
-#     [project-baseline.system]        # the M1 firmware package, pinned per repo
-#     VersionBuild = "0108"            # any System@ attribute may be listed
+#     [project-baseline.system]                    # asserted; per repo
+#     VersionBuild = "0108"
 #
-# The project version itself is policy rather than config: 1.00, build 0.
-# A repo with no [project-baseline] section is a clean no-op.
+# product_version and file_format move together - a newer M1 Build changes
+# both - so bump them in the same commit that lands the converted file.
+# No [project-baseline] section is a clean no-op.
 #
-# System@ attributes are pinned PER REPO rather than from one shared constant:
-# the firmware package is a deliberate choice and two projects legitimately sit
-# on different builds. The retired Python hook hardcoded one repo's values and
-# so silently reverted the other's on every commit.
-#
-# FileFormat is deliberately ASSERTED rather than rewritten. It describes the
-# file's actual serialisation, not per-save noise: a newer M1 Build genuinely
-# upgrades the format, so rewriting the attribute backwards mislabels a file
-# that really is the newer format, and rewriting it forwards claims an upgrade
-# that never happened. A mismatch is therefore reported as a deliberate
-# decision - upgrade the pin in m1-tools.toml, in the same commit that lands
-# the converted file.
-#
-# Follows the pre-commit fixer convention: it rewrites the files and exits 1 so
-# you see the change and re-stage it. It never runs `git add` itself — the
-# retired hook that did could clobber a partially staged commit.
+# It never runs `git add`: the retired hook staged its own edits, which could
+# clobber a partial stage.
 set -euo pipefail
 
 config="m1-tools.toml"
@@ -60,39 +62,70 @@ if [ -z "$product_version" ] || [ -z "$file_format" ]; then
   exit 2
 fi
 
-# Anchored exactly like the CI assertion: MoTeCM1BuildSession, and the one
-# <Project> element carrying FileFormat. Revision-history entries such as
-# <Project Name="AV24" … Build="9"> and <File … BuildNumber=…> also carry
-# version attributes and must never be rewritten, which is what the
-# FileFormat lookahead excludes.
+# Read one attribute from a given element. The <Project> element carrying
+# FileFormat is the project header; revision-history entries such as
+# <Project Name="AV24" Build="9"> and <File BuildNumber=...> must never match,
+# which is what the lookahead excludes.
+attr_of() { # <file> <element> <attribute>
+  case "$2" in
+    Project) perl -0777 -ne 'print $1 if /<Project\b(?=[^>]*?FileFormat=)[^>]*?'"$3"'="([^"]*)"/' "$1" ;;
+    *)       perl -0777 -ne 'print $1 if /<'"$2"'\b[^>]*?'"$3"'="([^"]*)"/' "$1" ;;
+  esac
+}
+
+# ---- pass 1: assert the toolchain facts, rewriting nothing -----------------
+drift=""
+note() { drift="$drift
+    $1"; }
+
+for file in "$@"; do
+  [ -f "$file" ] || continue
+
+  found="$(attr_of "$file" MoTeCM1BuildSession ProductVersion)"
+  if [ -n "$found" ] && [ "$found" != "$product_version" ]; then
+    note "$file: ProductVersion=$found, pinned $product_version"
+  fi
+
+  found="$(attr_of "$file" Project FileFormat)"
+  if [ -n "$found" ] && [ "$found" != "$file_format" ]; then
+    note "$file: FileFormat=$found, pinned $file_format"
+  fi
+
+  while IFS= read -r line; do
+    key="${line%%=*}"; key="${key//[[:space:]]/}"
+    val="${line#*=}"; val="${val#*\"}"; val="${val%%\"*}"
+    [ -n "$key" ] && [ -n "$val" ] || continue
+    found="$(attr_of "$file" System "$key")"
+    if [ -n "$found" ] && [ "$found" != "$val" ]; then
+      note "$file: System@$key=$found, pinned $val"
+    fi
+  done < <(sed -n '/^\[project-baseline\.system\]/,/^\[/{/^\[/d; /^[[:space:]]*#/d; /=/p;}' "$config")
+done
+
+if [ -n "$drift" ]; then
+  echo "The toolchain that wrote these files differs from the pinned baseline:$drift"
+  echo
+  echo "These are facts about the M1 Build / firmware that produced the file, so"
+  echo "they are reported rather than rewritten - relabelling would describe the"
+  echo "file as something it is not. Nothing has been modified."
+  echo
+  echo "If the change is intended (an M1 Build upgrade, or a deliberate firmware"
+  echo "selection), update [project-baseline] in m1-tools.toml to match, in the"
+  echo "same commit that lands these files. product_version and file_format move"
+  echo "together. If it is NOT intended, the file was saved by the wrong M1 Build"
+  echo "- reopen and save it with the pinned version instead."
+  exit 1
+fi
+
+# ---- pass 2: normalise the per-save noise ---------------------------------
 prog='
-  s{<MoTeCM1BuildSession\b[^>]*?ProductVersion="\K[^"]*}{'"$product_version"'};
-  s{<MoTeCM1BuildSession\b[^>]*?Locale="\K[^"]*}{'"$locale"'};
   s{<Project\b(?=[^>]*?FileFormat=)[^>]*?VersionMajor="\K[^"]*}{1};
   s{<Project\b(?=[^>]*?FileFormat=)[^>]*?VersionMinor="\K[^"]*}{0};
   s{<Project\b(?=[^>]*?FileFormat=)[^>]*?BuildNumber="\K[^"]*}{0};
+  s{<MoTeCM1BuildSession\b[^>]*?Locale="\K[^"]*}{'"$locale"'};
   s{<LogSetup\b[^>]*?Locale="\K[^"]*}{'"$locale"'};
   s{<Configuration\b[^>]*?Locale="\K[^"]*}{'"$locale"'};
 '
-
-# Append a substitution per pinned System@ attribute. The table is read as the
-# lines between [project-baseline.system] and the next section header.
-while IFS= read -r line; do
-  key="${line%%=*}"; key="${key//[[:space:]]/}"
-  val="${line#*=}"; val="${val#*\"}"; val="${val%%\"*}"
-  [ -n "$key" ] && [ -n "$val" ] || continue
-  prog="$prog s{<System\\b[^>]*?${key}=\"\\K[^\"]*}{${val}};"
-done < <(sed -n '/^\[project-baseline\.system\]/,/^\[/{/^\[/d; /^[[:space:]]*#/d; /=/p;}' "$config")
-
-# FileFormat: assert only. A mismatch is a real format change, not churn.
-format_drift=""
-for file in "$@"; do
-  [ -f "$file" ] || continue
-  found="$(perl -0777 -ne 'print $1 if /<Project\b(?=[^>]*?FileFormat=)[^>]*?FileFormat="([^"]*)"/' "$file")"
-  [ -n "$found" ] && [ "$found" != "$file_format" ] && \
-    format_drift="$format_drift
-    $file: FileFormat=$found, pinned $file_format"
-done
 
 changed=""
 for file in "$@"; do
@@ -104,22 +137,9 @@ for file in "$@"; do
   rm -f "$before"
 done
 
-if [ -n "$format_drift" ]; then
-  echo "Project file format differs from the pin:$format_drift"
-  echo
-  echo "This is a real format change, not per-save noise - a newer M1 Build"
-  echo "converts the file. It is NOT rewritten, because relabelling would lie"
-  echo "about the file's actual contents. If the upgrade is intended, set"
-  echo "  [project-baseline] file_format = \"<new>\"   in m1-tools.toml"
-  echo "in the same commit that lands the converted file."
-  exit 1
-fi
-
 [ -z "$changed" ] && exit 0
 
-echo "Normalised M1 Build's per-save stamps back to the committed baseline"
-echo "  (project version 1.00 build 0, ProductVersion $product_version,"
-echo "   FileFormat $file_format, Locale $locale):"
+echo "Normalised M1 Build's per-save stamps (build number, locale):"
 for file in $changed; do
   echo "    $file"
 done
