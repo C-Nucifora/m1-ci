@@ -17,14 +17,16 @@
 #     file_format     = "10108"                    # Project@FileFormat
 #     locale          = "English_Australia.1252"   # optional; this is the default
 #
+#     [project-baseline.system]        # the M1 firmware package, pinned per repo
+#     VersionBuild = "0108"            # any System@ attribute may be listed
+#
 # The project version itself is policy rather than config: 1.00, build 0.
 # A repo with no [project-baseline] section is a clean no-op.
 #
-# System@Version* is deliberately NOT normalised. Those move only when someone
-# deliberately selects a different firmware package — a reviewable change, not
-# per-save churn — and the two firmware repos legitimately differ (…0107 vs
-# …0108). The retired Python hook pinned them to one repo's values, which
-# silently reverted the other's.
+# System@ attributes are pinned PER REPO rather than from one shared constant:
+# the firmware package is a deliberate choice and two projects legitimately sit
+# on different builds. The retired Python hook hardcoded one repo's values and
+# so silently reverted the other's on every commit.
 #
 # Follows the pre-commit fixer convention: it rewrites the files and exits 1 so
 # you see the change and re-stage it. It never runs `git add` itself — the
@@ -64,6 +66,15 @@ prog='
   s{<LogSetup\b[^>]*?Locale="\K[^"]*}{'"$locale"'};
   s{<Configuration\b[^>]*?Locale="\K[^"]*}{'"$locale"'};
 '
+
+# Append a substitution per pinned System@ attribute. The table is read as the
+# lines between [project-baseline.system] and the next section header.
+while IFS= read -r line; do
+  key="${line%%=*}"; key="${key//[[:space:]]/}"
+  val="${line#*=}"; val="${val#*\"}"; val="${val%%\"*}"
+  [ -n "$key" ] && [ -n "$val" ] || continue
+  prog="$prog s{<System\\b[^>]*?${key}=\"\\K[^\"]*}{${val}};"
+done < <(sed -n '/^\[project-baseline\.system\]/,/^\[/{/^\[/d; /^[[:space:]]*#/d; /=/p;}' "$config")
 
 changed=""
 for file in "$@"; do
