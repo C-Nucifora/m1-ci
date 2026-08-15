@@ -68,7 +68,7 @@
   pass_filenames: false
 - id: m1-project-normalize
   name: normalise M1 Build's per-save project stamps
-  description: Rewrite Project@BuildNumber, MoTeCM1BuildSession@ProductVersion and the Locale attributes back to the committed baseline in m1-tools.toml [project-baseline].
+  description: Normalise Project@BuildNumber and the Locale attributes to m1-tools.toml [project-baseline]; assert ProductVersion, FileFormat and System@ (reported, never rewritten).
   entry: hooks/m1-project-normalize
   language: script
   # The files M1 Build stamps on save. Filenames ARE passed: unlike the CAN

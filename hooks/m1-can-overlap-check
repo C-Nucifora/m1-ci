@@ -39,14 +39,21 @@ overlaps = data.get("id_overlaps") or []
 
 def describe(overlap):
     ident = overlap.get("can_id_hex") or overlap.get("can_id")
-    head = "  id {} on bus {}".format(ident, overlap.get("bus"))
+    # The top-level "bus" is only present when every module resolved to the
+    # SAME bus; an unknown verdict omits it entirely, so rendering it blindly
+    # printed "on bus None". Say the bus is unresolved and let the per-message
+    # lines below carry whatever each module did resolve to.
+    bus = overlap.get("bus")
+    where = "on bus {}".format(bus) if bus is not None else "on an unresolved bus"
+    head = "  id {} {}".format(ident, where)
     if overlap.get("depends_on_calibration"):
         head += "  [rests on a parameters.m1cfg value - a retune can change it]"
     lines = [head]
     for msg in overlap.get("messages") or []:
+        mbus = msg.get("bus")
         lines.append("      {} {}  (module {}, bus {})".format(
             msg.get("direction", ""), msg.get("path"),
-            msg.get("module"), msg.get("bus")))
+            msg.get("module"), mbus if mbus is not None else "unresolved"))
     return "\n".join(lines)
 
 

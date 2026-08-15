@@ -127,24 +127,30 @@ prog='
   s{<Configuration\b[^>]*?Locale="\K[^"]*}{'"$locale"'};
 '
 
-changed=""
+# An array, not a string: these projects are full of paths with spaces
+# ("Logging Setup.m1dls", "PDM P14.m1dbc"), and word-splitting a joined string
+# would rewrite the wrong files and print an unrunnable staging command.
+changed=()
 for file in "$@"; do
   [ -f "$file" ] || continue
   before="$(mktemp)"
   cp "$file" "$before"
   perl -0777 -pi -e "$prog" "$file"
-  cmp -s "$before" "$file" || changed="$changed $file"
+  cmp -s "$before" "$file" || changed+=("$file")
   rm -f "$before"
 done
 
-[ -z "$changed" ] && exit 0
+[ "${#changed[@]}" -eq 0 ] && exit 0
 
 echo "Normalised M1 Build's per-save stamps (build number, locale):"
-for file in $changed; do
+for file in "${changed[@]}"; do
   echo "    $file"
 done
 echo
 echo "Review the change and stage it, then commit again:"
-# shellcheck disable=SC2086
-echo "    git add$changed"
+printf '    git add'
+for file in "${changed[@]}"; do
+  printf ' %q' "$file"
+done
+printf '\n'
 exit 1

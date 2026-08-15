@@ -58,6 +58,28 @@ jobs:
       - name: Assert the nedlane-owned tool set agrees
         run: ./tests/tool-owners.sh
 
+  # The two hooks added alongside m1-can carry real logic — a verdict split and
+  # an assert/normalise split — and both had bugs the green matrix could not
+  # see, because the matrix only runs the pre-existing hooks against a clean
+  # fixture. These exercise the branches that matter: same-bus/different-bus/
+  # unknown overlap verdicts, and normalise-vs-assert-vs-no-op plus a filename
+  # containing spaces (which these projects genuinely use).
+  self-test-can-overlap:
+    name: Self-test (CAN overlap verdicts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: same-bus fails, different-bus passes, unknown is reported
+        run: ./tests/can-overlap-verdicts.sh
+
+  self-test-project-normalize:
+    name: Self-test (project baseline normalise/assert)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: noise is normalised, toolchain facts are asserted, spaces survive
+        run: ./tests/project-normalize.sh
+
   # A downloaded hook binary must never execute unverified (#87): without an
   # authenticated gh the hook refuses (M1_CI_ALLOW_UNVERIFIED=1 is the loud,
   # explicit escape hatch). Hermetic: stub curl/gh, no network.
