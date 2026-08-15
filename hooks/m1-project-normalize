@@ -14,7 +14,8 @@
 #
 #     [project-baseline]
 #     product_version = "1.4.4.981"                # MoTeCM1BuildSession
-#     file_format     = "10108"                    # Project@FileFormat
+#     file_format     = "10108"                    # Project@FileFormat (asserted,
+#                                                  #   never rewritten - see below)
 #     locale          = "English_Australia.1252"   # optional; this is the default
 #
 #     [project-baseline.system]        # the M1 firmware package, pinned per repo
@@ -27,6 +28,14 @@
 # the firmware package is a deliberate choice and two projects legitimately sit
 # on different builds. The retired Python hook hardcoded one repo's values and
 # so silently reverted the other's on every commit.
+#
+# FileFormat is deliberately ASSERTED rather than rewritten. It describes the
+# file's actual serialisation, not per-save noise: a newer M1 Build genuinely
+# upgrades the format, so rewriting the attribute backwards mislabels a file
+# that really is the newer format, and rewriting it forwards claims an upgrade
+# that never happened. A mismatch is therefore reported as a deliberate
+# decision - upgrade the pin in m1-tools.toml, in the same commit that lands
+# the converted file.
 #
 # Follows the pre-commit fixer convention: it rewrites the files and exits 1 so
 # you see the change and re-stage it. It never runs `git add` itself — the
@@ -59,7 +68,6 @@ fi
 prog='
   s{<MoTeCM1BuildSession\b[^>]*?ProductVersion="\K[^"]*}{'"$product_version"'};
   s{<MoTeCM1BuildSession\b[^>]*?Locale="\K[^"]*}{'"$locale"'};
-  s{<Project\b(?=[^>]*?FileFormat=)[^>]*?FileFormat="\K[^"]*}{'"$file_format"'};
   s{<Project\b(?=[^>]*?FileFormat=)[^>]*?VersionMajor="\K[^"]*}{1};
   s{<Project\b(?=[^>]*?FileFormat=)[^>]*?VersionMinor="\K[^"]*}{0};
   s{<Project\b(?=[^>]*?FileFormat=)[^>]*?BuildNumber="\K[^"]*}{0};
@@ -76,6 +84,16 @@ while IFS= read -r line; do
   prog="$prog s{<System\\b[^>]*?${key}=\"\\K[^\"]*}{${val}};"
 done < <(sed -n '/^\[project-baseline\.system\]/,/^\[/{/^\[/d; /^[[:space:]]*#/d; /=/p;}' "$config")
 
+# FileFormat: assert only. A mismatch is a real format change, not churn.
+format_drift=""
+for file in "$@"; do
+  [ -f "$file" ] || continue
+  found="$(perl -0777 -ne 'print $1 if /<Project\b(?=[^>]*?FileFormat=)[^>]*?FileFormat="([^"]*)"/' "$file")"
+  [ -n "$found" ] && [ "$found" != "$file_format" ] && \
+    format_drift="$format_drift
+    $file: FileFormat=$found, pinned $file_format"
+done
+
 changed=""
 for file in "$@"; do
   [ -f "$file" ] || continue
@@ -85,6 +103,17 @@ for file in "$@"; do
   cmp -s "$before" "$file" || changed="$changed $file"
   rm -f "$before"
 done
+
+if [ -n "$format_drift" ]; then
+  echo "Project file format differs from the pin:$format_drift"
+  echo
+  echo "This is a real format change, not per-save noise - a newer M1 Build"
+  echo "converts the file. It is NOT rewritten, because relabelling would lie"
+  echo "about the file's actual contents. If the upgrade is intended, set"
+  echo "  [project-baseline] file_format = \"<new>\"   in m1-tools.toml"
+  echo "in the same commit that lands the converted file."
+  exit 1
+fi
 
 [ -z "$changed" ] && exit 0
 
