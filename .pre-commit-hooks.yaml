@@ -53,3 +53,25 @@
   # names must not be appended to the command line (the binary would reject
   # them as a bad invocation, exit 2).
   pass_filenames: false
+- id: m1-can-overlap-check
+  name: m1-can inspect (CAN id clashes)
+  description: Fail when two CAN messages share an identifier on the same bus (m1-can inspect).
+  entry: hooks/m1-can-overlap-check
+  language: script
+  # Ids come from the .m1dbc; the bus binding comes from the DBC.<Name>.Init
+  # call in a script; a bus named by a parameter is resolved from the .m1cfg;
+  # and the project ties them together. Any of them can turn a safe reuse into
+  # a clash, so all four are triggers.
+  files: (\.(m1dbc|m1scr|m1cfg)$|(^|/)Project\.m1prj$)
+  # inspect needs --project, which cannot be inferred from the staged names, so
+  # the consumer supplies it: args: [--project, <path>/Project.m1prj]
+  pass_filenames: false
+- id: m1-project-normalize
+  name: normalise M1 Build's per-save project stamps
+  description: Normalise Project@BuildNumber and the Locale attributes to m1-tools.toml [project-baseline]; assert ProductVersion, FileFormat and System@ (reported, never rewritten).
+  entry: hooks/m1-project-normalize
+  language: script
+  # The files M1 Build stamps on save. Filenames ARE passed: unlike the CAN
+  # hooks this is per-file, and only the staged ones should be rewritten.
+  files: \.(m1prj|m1cfg|m1dls)$
+
