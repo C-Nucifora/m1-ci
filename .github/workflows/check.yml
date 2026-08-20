@@ -62,15 +62,15 @@ on:
       typecheck-version:
         description: "m1-typecheck release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
-        default: "v0.49.1"
+        default: "v0.50.0"
       project-version:
         description: "m1-project release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
-        default: "v0.13.0"
+        default: "v0.14.0"
       can-version:
         description: "m1-can release to install: a tag like 'vX.Y.Z', or 'latest'."
         type: string
-        default: "v0.2.0"
+        default: "v0.2.2"
       tools-version:
         description: "Master override (advanced). Empty (default) uses the pinned per-tool versions above. Set to 'latest' to track the newest release of every tool; a single tag forces every tool (they are independently versioned, so a shared tag may not exist for all)."
         type: string
@@ -88,7 +88,7 @@ on:
           This default MUST equal `v$(cat VERSION)` — ci.yml's ci-ref-pin job
           enforces it, so the self-resolving ref cannot drift from the release.
         type: string
-        default: "v0.32.0"
+        default: "v0.33.0"
       m1-ci-repo:
         description: "Repo to load the composite actions from. Override for forks."
         type: string
