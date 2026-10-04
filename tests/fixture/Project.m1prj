@@ -1,10 +1,6 @@
 <?xml version="1.0"?>
 <MoTeCM1BuildSession>
  <Project Name="Demo" TargetHardware="ecu120">
-  <SelectedModuleSets>
-   <File Name="MoTeC Comms"/>
-   <File Name="MoTeC Control"/>
-  </SelectedModuleSets>
   <DataTypes>
    <Type Name="Switch State" Storage="enum" Default="Off">
     <Enum Name="Off" ContainerOrder="0"/>
