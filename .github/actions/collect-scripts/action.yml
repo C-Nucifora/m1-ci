@@ -74,7 +74,7 @@ runs:
         if [ "$CHANGED_ONLY" = "true" ] && [ -n "${BASE_SHA:-}" ]; then
           if git fetch --quiet --depth=1 origin "$BASE_SHA" 2>/dev/null \
              && git diff --name-only -z --diff-filter=ACMR "$BASE_SHA" HEAD > "$RUNNER_TEMP/m1-changed.nul" 2>/dev/null; then
-            python3 -c 'import os,sys; ap,cp=sys.argv[1],sys.argv[2]; found=[p for p in open(ap,"rb").read().split(b"\0") if p]; changed={os.path.normpath(p) for p in open(cp,"rb").read().split(b"\0") if p}; kept=[p for p in found if os.path.normpath(p) in changed]; f=open(ap,"wb"); _=[f.write(p+b"\0") for p in kept]; f.close(); print("changed-only: kept %d of %d script(s)" % (len(kept), len(found)))' "$RUNNER_TEMP/m1-scripts.nul" "$RUNNER_TEMP/m1-changed.nul"
+            python3 -c 'import os,sys; ap,cp=sys.argv[1],sys.argv[2]; found=[p for p in open(ap,"rb").read().split(b"\0") if p]; changed={os.path.abspath(p) for p in open(cp,"rb").read().split(b"\0") if p}; kept=[p for p in found if os.path.abspath(p) in changed]; f=open(ap,"wb"); _=[f.write(p+b"\0") for p in kept]; f.close(); print("changed-only: kept %d of %d script(s)" % (len(kept), len(found)))' "$RUNNER_TEMP/m1-scripts.nul" "$RUNNER_TEMP/m1-changed.nul"
           else
             echo "::warning::changed-only requested but the PR base could not be diffed; checking the full tree"
           fi
