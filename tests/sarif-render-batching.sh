@@ -101,10 +101,10 @@ echo "ok: aggregated SARIF has version 2.1.0 and all $runs batch runs"
 
 # 1c. The structural guard accepts the good document and rejects empty/crash
 #     output (where a bare `[ -s ]` non-empty test would not help).
-jq -e '.runs' "$out" >/dev/null || fail "structural guard rejected a valid aggregated SARIF"
+jq -e -s 'length == 1 and (.[0].runs | type == "array")' "$out" >/dev/null || fail "structural guard rejected a valid aggregated SARIF"
 empty="$tmp/empty.sarif"; : > "$empty"
-if jq -e '.runs' "$empty" >/dev/null 2>&1; then fail "structural guard accepted an empty render"; fi
-echo "ok: jq -e .runs guard accepts the valid document and rejects empty output"
+if jq -e -s 'length == 1 and (.[0].runs | type == "array")' "$empty" >/dev/null 2>&1; then fail "structural guard accepted an empty render"; fi
+echo "ok: structural guard accepts one SARIF document and rejects empty output"
 
 # --- Part 2: static ---------------------------------------------------------
 #
