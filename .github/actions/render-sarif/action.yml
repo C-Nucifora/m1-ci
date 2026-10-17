@@ -44,6 +44,8 @@ runs:
         EXTRA_FLAG: ${{ inputs.extra-flag }}
         EXTRA_VALUE: ${{ inputs.extra-value }}
       run: |
+        # Actions starts bash with -e; findings are handled by the guard below.
+        set +e
         set -uo pipefail
         # Optional extra arg (e.g. --baseline <path> / --project <path>), built as
         # an array so it's omitted entirely — not passed as empty args — when
@@ -69,7 +71,7 @@ runs:
         # complete, so that exit is not a render failure. Validate the AGGREGATED
         # document instead of merely checking it is non-empty — a concatenated
         # multi-document file is non-empty but invalid SARIF.
-        if ! jq -e '.runs' "$RUNNER_TEMP/$TOOL.sarif" >/dev/null 2>&1; then
+        if ! jq -e -s 'length == 1 and (.[0].runs | type == "array")' "$RUNNER_TEMP/$TOOL.sarif" >/dev/null 2>&1; then
           echo "::error::sarif-upload: $TOOL produced no valid SARIF output"
           exit 1
         fi
