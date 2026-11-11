@@ -121,8 +121,10 @@ grep -qE 'jq -s ' "$render_action" \
 if grep -qE 'if ! \[ -s "\$RUNNER_TEMP/.*\.sarif" \]' "$render_action"; then
   fail "render-sarif still guards with a non-empty-only test ([ -s ]); a concatenated multi-document file passes it. Validate the document instead (e.g. jq -e .runs)."
 fi
-grep -qE 'jq -e .*\.runs' "$render_action" \
-  || fail "render-sarif guard does not validate the document structure (expected 'jq -e ... .runs')"
+if ! grep -qF 'jq -e -s' "$render_action" \
+  || ! grep -qF '.runs | type == "array"' "$render_action"; then
+  fail "render-sarif must validate each batch as one document with a runs array"
+fi
 echo "ok: render-sarif uses the aggregating render (jq -s) and the structural guard (jq -e .runs)"
 
 # And check.yml must DELEGATE to the action — it must not re-inline the

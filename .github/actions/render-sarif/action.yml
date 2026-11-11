@@ -6,7 +6,7 @@ description: >
   the aggregated document to $RUNNER_TEMP/<tool>.sarif.
 
 # Shared by the lint and typecheck jobs in check.yml so the SARIF-aggregation
-# contract — the xargs-batch `jq -s` merge and the `jq -e .runs` structural guard
+# contract — per-batch validation followed by the xargs-batch `jq -s` merge
 # — lives in exactly ONE place and cannot drift between the two jobs (the two
 # render steps were structurally identical, differing only in the tool name and
 # the optional extra-args). See check.yml for why the reusable workflow checks
@@ -44,32 +44,36 @@ runs:
         EXTRA_FLAG: ${{ inputs.extra-flag }}
         EXTRA_VALUE: ${{ inputs.extra-value }}
       run: |
-        set -uo pipefail
-        # Optional extra arg (e.g. --baseline <path> / --project <path>), built as
-        # an array so it's omitted entirely — not passed as empty args — when
-        # unset, and so a value containing spaces stays ONE argument. The caller's
-        # gate step already validated the value; here it's just mirrored so the
-        # SARIF matches what the gate reported.
+        set -euo pipefail
         extra=()
         if [ -n "$EXTRA_FLAG" ]; then
           extra=("$EXTRA_FLAG" "$EXTRA_VALUE")
         fi
-        # xargs invokes the tool once per batch, and its command buffer is only
-        # ~128 KB (xargs --show-limits), not ARG_MAX — a large project's script
-        # list crosses that and xargs runs the tool MORE THAN ONCE. Each
-        # invocation emits its own complete SARIF document, so a plain `> file`
-        # redirect would concatenate several root JSON objects into one invalid
-        # file. Aggregate every batch's document into ONE: jq -s slurps them,
-        # keeps the first's top-level shape, and concatenates their `runs` arrays.
-        # jq is preinstalled on ubuntu-latest.
-        xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" "$TOOL" "${extra[@]}" --format sarif \
+        rm -f -- "$RUNNER_TEMP/$TOOL.sarif"
+        batch_dir=$(mktemp -d "$RUNNER_TEMP/m1-sarif.XXXXXX")
+        trap 'rm -rf -- "$batch_dir"' EXIT
+        export batch_dir
+        render_batch() {
+          local output status=0
+          output=$(mktemp "$batch_dir/batch.XXXXXX") || return 1
+          "$@" > "$output" || status=$?
+          # Only normal success and finding exits carry complete results.
+          if [ "$status" -gt 1 ] || ! jq -e -s '
+            length == 1 and (.[0] |
+              .version == "2.1.0" and
+              (.runs | type == "array" and length > 0 and
+                all(.[]; type == "object" and (.tool.driver.name | type == "string"))))
+          ' "$output" >/dev/null 2>&1; then
+            echo "::error::sarif-upload: invalid or incomplete batch from $1 (exit $status)" >&2
+            return 1
+          fi
+          cat "$output"
+        }
+        export -f render_batch
+        # Validate each batch before merging so a crashed invocation cannot
+        # disappear behind another batch's valid document.
+        xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" bash -c 'render_batch "$@"' _ \
+          "$TOOL" "${extra[@]}" --format sarif \
           | jq -s '.[0] * {runs: (map(.runs) | add)}' \
-          > "$RUNNER_TEMP/$TOOL.sarif"
-        # The tool exits non-zero on findings; the SARIF document is still
-        # complete, so that exit is not a render failure. Validate the AGGREGATED
-        # document instead of merely checking it is non-empty — a concatenated
-        # multi-document file is non-empty but invalid SARIF.
-        if ! jq -e '.runs' "$RUNNER_TEMP/$TOOL.sarif" >/dev/null 2>&1; then
-          echo "::error::sarif-upload: $TOOL produced no valid SARIF output"
-          exit 1
-        fi
+          > "$batch_dir/combined.sarif"
+        mv -- "$batch_dir/combined.sarif" "$RUNNER_TEMP/$TOOL.sarif"
