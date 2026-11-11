@@ -61,7 +61,7 @@ runs:
         echo "cacheable=$([ "$version" = latest ] && echo false || echo true)" >> "$GITHUB_OUTPUT"
 
     # A pinned release asset is immutable: cache the (already verified) binary
-    # by tool+version+target so the common path skips the download AND the
+    # by repo+tool+version+target so the common path skips the download AND the
     # attestation round-trip, and survives transient release-asset 5xx (#43).
     - name: Cache ${{ inputs.tool }} binary
       id: bincache
@@ -69,7 +69,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ~/.m1-tool-cache/${{ inputs.tool }}
-        key: m1-tool-${{ inputs.tool }}-${{ steps.resolve.outputs.version }}-x86_64-unknown-linux-gnu
+        key: m1-tool-${{ steps.resolve.outputs.repo }}-${{ inputs.tool }}-${{ steps.resolve.outputs.version }}-x86_64-unknown-linux-gnu
 
     - name: Install ${{ inputs.tool }} (prebuilt)
       id: prebuilt

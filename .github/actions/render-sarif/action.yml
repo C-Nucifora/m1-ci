@@ -44,7 +44,7 @@ runs:
         EXTRA_FLAG: ${{ inputs.extra-flag }}
         EXTRA_VALUE: ${{ inputs.extra-value }}
       run: |
-        set -uo pipefail
+        set -euo pipefail
         # Optional extra arg (e.g. --baseline <path> / --project <path>), built as
         # an array so it's omitted entirely — not passed as empty args — when
         # unset, and so a value containing spaces stays ONE argument. The caller's
@@ -59,17 +59,32 @@ runs:
         # list crosses that and xargs runs the tool MORE THAN ONCE. Each
         # invocation emits its own complete SARIF document, so a plain `> file`
         # redirect would concatenate several root JSON objects into one invalid
-        # file. Aggregate every batch's document into ONE: jq -s slurps them,
-        # keeps the first's top-level shape, and concatenates their `runs` arrays.
-        # jq is preinstalled on ubuntu-latest.
-        xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" "$TOOL" "${extra[@]}" --format sarif \
+        # file. Validate each invocation before emitting its document: an empty
+        # failed batch must not disappear behind another batch's valid report.
+        # Only exit 1 denotes findings; higher statuses are operational failures.
+        # jq -s then keeps the first document's shape and joins all runs.
+        # shellcheck disable=SC2016 # The child bash expands its own arguments.
+        if ! xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" bash -c '
+          batch=$(mktemp "$RUNNER_TEMP/m1-sarif-batch.XXXXXX") || exit 1
+          trap "rm -f \"$batch\"" EXIT
+          code=0
+          "$@" > "$batch" || code=$?
+          if [ "$code" -gt 1 ] || ! jq -e -s "length == 1 and .[0].version == \"2.1.0\" and (.[0].runs | type == \"array\")" "$batch" >/dev/null 2>&1; then
+            echo "::error::sarif-upload: $1 failed or produced no valid SARIF for a batch" >&2
+            exit 1
+          fi
+          cat "$batch"
+        ' _ "$TOOL" "${extra[@]}" --format sarif \
           | jq -s '.[0] * {runs: (map(.runs) | add)}' \
-          > "$RUNNER_TEMP/$TOOL.sarif"
+          > "$RUNNER_TEMP/$TOOL.sarif"; then
+          rm -f "$RUNNER_TEMP/$TOOL.sarif"
+          exit 1
+        fi
         # The tool exits non-zero on findings; the SARIF document is still
         # complete, so that exit is not a render failure. Validate the AGGREGATED
         # document instead of merely checking it is non-empty — a concatenated
         # multi-document file is non-empty but invalid SARIF.
-        if ! jq -e '.runs' "$RUNNER_TEMP/$TOOL.sarif" >/dev/null 2>&1; then
+        if ! jq -e -s 'length == 1 and (.[0].runs | type == "array")' "$RUNNER_TEMP/$TOOL.sarif" >/dev/null 2>&1; then
           echo "::error::sarif-upload: $TOOL produced no valid SARIF output"
           exit 1
         fi
