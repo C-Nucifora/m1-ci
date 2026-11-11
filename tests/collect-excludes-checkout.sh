@@ -109,3 +109,62 @@ fi
 echo "ok: a subdir scripts-path is unaffected by the exclude"
 
 echo "PASS: collect-scripts prunes the m1-ci checkout from a zero-config consumer's search"
+
+# Exercise the actual action against a real changed-file list.
+python3 - "$action" <<'PYTEST'
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import textwrap
+
+script = textwrap.dedent(Path(sys.argv[1]).read_text().split("      run: |\n", 1)[1])
+with tempfile.TemporaryDirectory(prefix="m1-collect-changed-") as directory:
+    root = Path(directory)
+    work = root / "work"
+    work.mkdir()
+    def git(*args):
+        return subprocess.check_output(["git", "-c", "user.name=Fixture", "-c",
+            "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", *args],
+            cwd=work, stderr=subprocess.DEVNULL).decode().strip()
+    git("init", "-q")
+    scripts = work / "Scripts"
+    scripts.mkdir()
+    names = ["Changed space.m1scr", "Changed\nline.m1scr", "same.m1scr", "deleted.m1scr"]
+    for name in names:
+        (scripts / name).write_text("old")
+    excluded = scripts / ".m1-ci"
+    excluded.mkdir()
+    (excluded / "bad.m1scr").write_text("old")
+    git("add", ".")
+    git("commit", "-qm", "fixture base")
+    base = git("rev-parse", "HEAD")
+    for name in names[:2]:
+        (scripts / name).write_text("new")
+    (scripts / names[3]).unlink()
+    (excluded / "bad.m1scr").write_text("new")
+    git("add", ".")
+    git("commit", "-qm", "fixture changes")
+    git("remote", "add", "origin", str(work))
+    for cwd, search in [(work, "Scripts"), (work, "./Scripts"),
+            (work, "Scripts/"), (work, str(scripts)), (scripts, ".")]:
+        output = root / "output"
+        output.write_text("")
+        env = dict(os.environ, RUNNER_TEMP=str(root), GITHUB_OUTPUT=str(output),
+            SCRIPTS_PATH=search, CHANGED_ONLY="true", BASE_SHA=base,
+            EXCLUDE_DIR=str(excluded))
+        subprocess.run(["bash", "-c", script], cwd=cwd, env=env, check=True,
+            capture_output=True, timeout=15)
+        found = [p for p in (root / "m1-scripts.nul").read_bytes().split(b"\0") if p]
+        actual = {os.path.abspath(os.path.join(os.fsencode(cwd), p)) for p in found}
+        expected = {os.fsencode(scripts / name) for name in names[:2]}
+        assert actual == expected, (cwd, search, found)
+        assert output.read_text() == "count=2\n"
+    env["BASE_SHA"] = "missing-base"
+    subprocess.run(["bash", "-c", script], cwd=scripts, env=env, check=True,
+        capture_output=True, timeout=15)
+    found = (root / "m1-scripts.nul").read_bytes().split(b"\0")
+    assert b"./same.m1scr" in found, found
+print("ok: changed-only handles relative, absolute and nested paths and failed-fetch fallback")
+PYTEST
