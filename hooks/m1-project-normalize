@@ -46,31 +46,71 @@ set -euo pipefail
 
 config="m1-tools.toml"
 [ -f "$config" ] || exit 0
-grep -q '^\[project-baseline\]' "$config" || exit 0
+# Python 3.11+ provides TOML parsing; never treat unsupported syntax as no config.
+values_file="$(mktemp)"
+trap 'rm -f "$values_file"' EXIT
+if ! python3 - "$config" >"$values_file" <<'PY'
+import re
+import sys
 
-value_of() {
-  sed -n "s/^$1[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$config" | head -n1
-}
+try:
+    import tomllib
+except ImportError:
+    sys.exit("m1-project-normalize: Python 3.11 or newer is required")
 
-product_version="$(value_of product_version)"
-file_format="$(value_of file_format)"
-locale="$(value_of locale)"
-: "${locale:=English_Australia.1252}"
-
-if [ -z "$product_version" ] || [ -z "$file_format" ]; then
-  echo "m1-project-normalize: [project-baseline] needs product_version and file_format" >&2
+try:
+    with open(sys.argv[1], "rb") as source:
+        config = tomllib.load(source)
+    if "project-baseline" not in config:
+        sys.exit(0)
+    baseline = config["project-baseline"]
+    if not isinstance(baseline, dict):
+        raise ValueError("project-baseline must be a table")
+    values = []
+    for key in ("product_version", "file_format", "locale"):
+        value = baseline.get(key, "English_Australia.1252" if key == "locale" else None)
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"project-baseline needs a nonempty string for {key}")
+        values.append(value)
+    system = baseline.get("system", {})
+    if not isinstance(system, dict):
+        raise ValueError("project-baseline.system must be a table")
+    for key, value in system.items():
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.:-]*", key):
+            raise ValueError(f"invalid System attribute name: {key!r}")
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"System attribute {key} needs a nonempty string")
+        values.extend((key, value))
+    if any(re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]", value) for value in values):
+        raise ValueError("baseline contains an invalid XML character")
+    for value in values:
+        sys.stdout.buffer.write(value.encode("utf-8") + b"\0")
+except (OSError, ValueError) as error:
+    sys.exit(f"m1-project-normalize: {error}")
+PY
+then
   exit 2
 fi
+[ -s "$values_file" ] || exit 0
+values=()
+while IFS= read -r -d '' value; do
+  values+=("$value")
+done <"$values_file"
+product_version="${values[0]}"
+file_format="${values[1]}"
+locale="${values[2]}"
 
 # Read one attribute from a given element. The <Project> element carrying
 # FileFormat is the project header; revision-history entries such as
 # <Project Name="AV24" Build="9"> and <File BuildNumber=...> must never match,
 # which is what the lookahead excludes.
 attr_of() { # <file> <element> <attribute>
-  case "$2" in
-    Project) perl -0777 -ne 'print $1 if /<Project\b(?=[^>]*?FileFormat=)[^>]*?'"$3"'="([^"]*)"/' "$1" ;;
-    *)       perl -0777 -ne 'print $1 if /<'"$2"'\b[^>]*?'"$3"'="([^"]*)"/' "$1" ;;
-  esac
+  M1_NORMALIZE_ELEMENT="$2" M1_NORMALIZE_ATTRIBUTE="$3" perl -0777 -ne '
+    my $element = $ENV{M1_NORMALIZE_ELEMENT};
+    my $attribute = $ENV{M1_NORMALIZE_ATTRIBUTE};
+    my $header = $element eq "Project" ? qr/(?=[^>]*?FileFormat=)/ : qr//;
+    print $1 if /<\Q$element\E\b$header[^>]*?\s\Q$attribute\E="([^"]*)"/;
+  ' "$1"
 }
 
 # ---- pass 1: assert the toolchain facts, rewriting nothing -----------------
@@ -91,15 +131,14 @@ for file in "$@"; do
     note "$file: FileFormat=$found, pinned $file_format"
   fi
 
-  while IFS= read -r line; do
-    key="${line%%=*}"; key="${key//[[:space:]]/}"
-    val="${line#*=}"; val="${val#*\"}"; val="${val%%\"*}"
-    [ -n "$key" ] && [ -n "$val" ] || continue
+  for ((i = 3; i < ${#values[@]}; i += 2)); do
+    key="${values[i]}"
+    val="${values[i + 1]}"
     found="$(attr_of "$file" System "$key")"
     if [ -n "$found" ] && [ "$found" != "$val" ]; then
       note "$file: System@$key=$found, pinned $val"
     fi
-  done < <(sed -n '/^\[project-baseline\.system\]/,/^\[/{/^\[/d; /^[[:space:]]*#/d; /=/p;}' "$config")
+  done
 done
 
 if [ -n "$drift" ]; then
@@ -118,14 +157,6 @@ if [ -n "$drift" ]; then
 fi
 
 # ---- pass 2: normalise the per-save noise ---------------------------------
-prog='
-  s{<Project\b(?=[^>]*?FileFormat=)[^>]*?VersionMajor="\K[^"]*}{1};
-  s{<Project\b(?=[^>]*?FileFormat=)[^>]*?VersionMinor="\K[^"]*}{0};
-  s{<Project\b(?=[^>]*?FileFormat=)[^>]*?BuildNumber="\K[^"]*}{0};
-  s{<MoTeCM1BuildSession\b[^>]*?Locale="\K[^"]*}{'"$locale"'};
-  s{<LogSetup\b[^>]*?Locale="\K[^"]*}{'"$locale"'};
-  s{<Configuration\b[^>]*?Locale="\K[^"]*}{'"$locale"'};
-'
 
 # An array, not a string: these projects are full of paths with spaces
 # ("Logging Setup.m1dls", "PDM P14.m1dbc"), and word-splitting a joined string
@@ -135,7 +166,22 @@ for file in "$@"; do
   [ -f "$file" ] || continue
   before="$(mktemp)"
   cp "$file" "$before"
-  perl -0777 -pi -e "$prog" "$file"
+  M1_NORMALIZE_LOCALE="$locale" perl -0777 -pi -e '
+  my $locale = $ENV{M1_NORMALIZE_LOCALE};
+  $locale =~ s/&/&amp;/g;
+  $locale =~ s/</&lt;/g;
+  $locale =~ s/>/&gt;/g;
+  $locale =~ s/"/&quot;/g;
+  $locale =~ s/\r/&#13;/g;
+  $locale =~ s/\n/&#10;/g;
+  $locale =~ s/\t/&#9;/g;
+  s{<Project\b(?=[^>]*?FileFormat=)[^>]*?VersionMajor="\K[^"]*}{1};
+  s{<Project\b(?=[^>]*?FileFormat=)[^>]*?VersionMinor="\K[^"]*}{0};
+  s{<Project\b(?=[^>]*?FileFormat=)[^>]*?BuildNumber="\K[^"]*}{0};
+  s{<MoTeCM1BuildSession\b[^>]*?Locale="\K[^"]*}{$locale};
+  s{<LogSetup\b[^>]*?Locale="\K[^"]*}{$locale};
+  s{<Configuration\b[^>]*?Locale="\K[^"]*}{$locale};
+' "$file"
   cmp -s "$before" "$file" || changed+=("$file")
   rm -f "$before"
 done
