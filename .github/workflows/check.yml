@@ -363,7 +363,7 @@ jobs:
       # exactly the pre-existing backlog the baseline exists to hide.
       - name: Render SARIF (m1-lint --format sarif)
         id: render-sarif-lint
-        if: inputs.sarif-upload && steps.collect-sarif.outputs.count != '0' && !cancelled()
+        if: inputs.sarif-upload && steps.collect-sarif.outcome == 'success' && steps.collect-sarif.outputs.count != '' && steps.collect-sarif.outputs.count != '0' && !cancelled()
         uses: ./.m1-ci/.github/actions/render-sarif
         with:
           tool: m1-lint
@@ -375,9 +375,9 @@ jobs:
       # second "SARIF file is empty" error masking the real one. Keep
       # !cancelled() so the step still runs after the lint step fails on findings
       # (an `if:` with no status function gets an implicit success(), which is
-      # false then), and AND the render outcome gate on top.
+      # false then). Require complete collection and a successful render.
       - name: Upload SARIF to code scanning
-        if: inputs.sarif-upload && steps.collect-sarif.outputs.count != '0' && !cancelled() && steps.render-sarif-lint.outcome == 'success'
+        if: inputs.sarif-upload && steps.collect-sarif.outcome == 'success' && steps.collect-sarif.outputs.count != '' && steps.collect-sarif.outputs.count != '0' && !cancelled() && steps.render-sarif-lint.outcome == 'success'
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ runner.temp }}/m1-lint.sarif
@@ -577,7 +577,7 @@ jobs:
       # findings.
       - name: Render SARIF (m1-typecheck --format sarif)
         id: render-sarif-typecheck
-        if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled()
+        if: inputs.sarif-upload && steps.collect.outcome == 'success' && steps.collect.outputs.count != '' && steps.collect.outputs.count != '0' && !cancelled()
         uses: ./.m1-ci/.github/actions/render-sarif
         with:
           tool: m1-typecheck
@@ -585,10 +585,10 @@ jobs:
           extra-value: ${{ inputs.project-file }}
 
       # See the lint job (#53): keep !cancelled() so the step still runs after
-      # the check step fails on findings, and AND a render-success gate on top
-      # so a failed render doesn't trigger a masking upload-sarif error.
+      # the check step fails on findings. Require complete collection and a
+      # successful render so an incomplete analysis cannot replace old alerts.
       - name: Upload SARIF to code scanning
-        if: inputs.sarif-upload && steps.collect.outputs.count != '0' && !cancelled() && steps.render-sarif-typecheck.outcome == 'success'
+        if: inputs.sarif-upload && steps.collect.outcome == 'success' && steps.collect.outputs.count != '' && steps.collect.outputs.count != '0' && !cancelled() && steps.render-sarif-typecheck.outcome == 'success'
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ runner.temp }}/m1-typecheck.sarif

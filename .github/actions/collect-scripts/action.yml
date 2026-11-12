@@ -49,6 +49,10 @@ runs:
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set -euo pipefail
+        # A failed re-collection must leave neither the previous nor a partial list.
+        rm -f -- "$RUNNER_TEMP/m1-scripts.nul"
+        scripts_list=$(mktemp "$RUNNER_TEMP/m1-scripts.XXXXXX")
+        trap 'rm -f -- "$scripts_list"' EXIT
         # NUL-delimited so script names containing spaces are handled safely.
         # Prune the m1-ci checkout (EXCLUDE_DIR) so ITS intentionally-broken test
         # fixtures never enter the caller's check: every job checks m1-ci out into
@@ -67,7 +71,7 @@ runs:
             *) prune=(-path "$sp/$rel" -prune -o) ;;
           esac
         fi
-        find "$sp" "${prune[@]}" -type f -name '*.m1scr' -print0 > "$RUNNER_TEMP/m1-scripts.nul"
+        find "$sp" "${prune[@]}" -type f -name '*.m1scr' -print0 > "$scripts_list"
         # changed-only (#22): on a PR, intersect with the files changed vs the
         # base. Any failure (shallow clone, missing base) keeps the full list —
         # never silently check less than asked without a reason on the log.
@@ -75,13 +79,14 @@ runs:
           if git fetch --quiet --depth=1 origin "$BASE_SHA" 2>/dev/null \
              && repo_root=$(git rev-parse --show-toplevel) \
              && git diff --name-only --relative= -z --diff-filter=ACMR "$BASE_SHA" HEAD > "$RUNNER_TEMP/m1-changed.nul" 2>/dev/null; then
-            python3 -c 'import os,sys; ap,cp,root=sys.argv[1:]; root=os.fsencode(root); found=[p for p in open(ap,"rb").read().split(b"\0") if p]; changed={os.path.normpath(os.path.join(root,p)) for p in open(cp,"rb").read().split(b"\0") if p}; kept=[p for p in found if os.path.abspath(p) in changed]; f=open(ap,"wb"); _=[f.write(p+b"\0") for p in kept]; f.close(); print("changed-only: kept %d of %d script(s)" % (len(kept), len(found)))' "$RUNNER_TEMP/m1-scripts.nul" "$RUNNER_TEMP/m1-changed.nul" "$repo_root"
+            python3 -c 'import os,sys; ap,cp,root=sys.argv[1:]; root=os.fsencode(root); found=[p for p in open(ap,"rb").read().split(b"\0") if p]; changed={os.path.normpath(os.path.join(root,p)) for p in open(cp,"rb").read().split(b"\0") if p}; kept=[p for p in found if os.path.abspath(p) in changed]; f=open(ap,"wb"); _=[f.write(p+b"\0") for p in kept]; f.close(); print("changed-only: kept %d of %d script(s)" % (len(kept), len(found)))' "$scripts_list" "$RUNNER_TEMP/m1-changed.nul" "$repo_root"
           else
             echo "::warning::changed-only requested but the PR base could not be diffed; checking the full tree"
           fi
         fi
         # Count -print0 records by their NUL terminators (robust for names with spaces/newlines).
-        count=$(tr -dc '\0' < "$RUNNER_TEMP/m1-scripts.nul" | wc -c | tr -d ' ')
+        count=$(tr -dc '\0' < "$scripts_list" | wc -c | tr -d ' ')
+        mv -- "$scripts_list" "$RUNNER_TEMP/m1-scripts.nul"
         echo "count=$count" >> "$GITHUB_OUTPUT"
         echo "Found $count .m1scr file(s) under '$SCRIPTS_PATH'."
         if [ "$count" -eq 0 ]; then

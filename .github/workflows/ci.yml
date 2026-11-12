@@ -90,6 +90,10 @@ jobs:
       - uses: actions/checkout@v7
       - name: Assert unverifiable downloads are refused
         run: ./tests/hook-verify-required.sh
+      - name: Failed source installs stop hooks before cache publication
+        run: ./tests/hook-install-status.sh
+      - name: Failed downloads never enter the binary cache
+        run: ./tests/install-download-status.sh
 
   # The local pre-commit hooks and the CI workflow must install the SAME tool
   # versions. tools.env is the single source of truth; assert check.yml's input
@@ -443,6 +447,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: render-sarif aggregates batches into one valid document
         run: ./tests/render-sarif-action.sh
+      - name: SARIF requires complete discovery and still reports findings
+        run: ./tests/collect-sarif-completeness.sh
 
   # Project.m1prj auto-discovery must stay inside the caller's checkout and pick
   # deterministically. The default scripts-path "." makes "$SCRIPTS_PATH/.." the

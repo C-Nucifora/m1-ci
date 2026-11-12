@@ -134,12 +134,13 @@ ensure_tool() {
   fi
 
   # Fallback: cargo install the pinned tag into the cache dir.
+  # Callers use command substitution, where Bash may clear errexit.
   if ! command -v cargo >/dev/null 2>&1; then
     echo "m1-ci hook: cannot install ${tool}: no prebuilt binary and cargo is not available." >&2
     exit 1
   fi
   cargo install --locked --git "https://github.com/${owner}/${tool}.git" --tag "$version" \
-    --root "$CACHE_DIR/cargo-${tool}-${version}" "$tool" >&2
-  cp "$CACHE_DIR/cargo-${tool}-${version}/bin/${tool}${ext}" "$dest"
+    --root "$CACHE_DIR/cargo-${tool}-${version}" "$tool" >&2 || return $?
+  cp "$CACHE_DIR/cargo-${tool}-${version}/bin/${tool}${ext}" "$dest" || return $?
   printf '%s\n' "$dest"
 }
