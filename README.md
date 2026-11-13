@@ -156,3 +156,11 @@ GPL-3.0 — see [LICENSE](LICENSE).
 Independent, community-built open-source tooling for the MoTeC® M1 script
 language. Not affiliated with, authorised, or endorsed by MoTeC Pty Ltd.
 "MoTeC" and "M1" are trademarks of MoTeC Pty Ltd.
+
+## Project metadata normalization
+
+The optional `m1-project-normalize` pre-commit hook requires Python 3.11 or
+newer and Perl. It reads `[project-baseline]` and `[project-baseline.system]`
+from `m1-tools.toml` as TOML. Pins must be nonempty strings. Invalid configuration
+fails before any project files are changed. Locale values are XML-escaped;
+product, file-format and firmware pins are checked without rewriting them.

@@ -104,15 +104,16 @@ runs:
           exit 0
         fi
         rm -f "$RUNNER_TEMP/$asset"
+        downloaded=true
         if [ "$version" = latest ]; then
           gh release download --repo "$repo" --pattern "$asset" \
-            --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
+            --dir "$RUNNER_TEMP" --clobber 2>/dev/null || downloaded=false
         else
           gh release download "$version" --repo "$repo" --pattern "$asset" \
-            --dir "$RUNNER_TEMP" --clobber 2>/dev/null || true
+            --dir "$RUNNER_TEMP" --clobber 2>/dev/null || downloaded=false
         fi
         need_source=false
-        if [ -f "$RUNNER_TEMP/$asset" ]; then
+        if [ "$downloaded" = true ] && [ -f "$RUNNER_TEMP/$asset" ]; then
           # Verify GitHub-native build provenance before trusting the binary
           # we are about to chmod +x and run on the caller's source (#7).
           # Classify the failure (#48): a release that predates attestation
@@ -133,6 +134,7 @@ runs:
           install -m 0755 "$RUNNER_TEMP/$asset" "$dest"
           echo "Installed $tool $version from a release binary."
         else
+          rm -f "$RUNNER_TEMP/$asset"
           echo "No release asset for $tool ($version); building from source."
           need_source=true
         fi

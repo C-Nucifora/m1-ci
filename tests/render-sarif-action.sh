@@ -270,3 +270,45 @@ fi
 echo "ok: check.yml no longer inlines the SARIF render (single canonical source in the action)"
 
 echo "PASS: render-sarif-action"
+
+# One valid batch must not hide a different batch's failure.
+cat > "$faketool" <<'TOOL'
+#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path
+import signal
+import sys
+counter = Path(os.environ["RUNNER_TEMP"]) / "batch-count"
+n = int(counter.read_text()) + 1 if counter.exists() else 1
+counter.write_text(str(n))
+mode = os.environ["BATCH_MODE"]
+doc = {"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "fake"}}, "results": []}]}
+bad = n == int(os.environ["BAD_BATCH"])
+if bad and mode == "silent":
+    sys.exit(139)
+if bad and mode == "signal":
+    os.kill(os.getpid(), signal.SIGTERM)
+if bad and mode == "malformed":
+    print('{"runs":')
+elif bad and mode == "multiple":
+    print(json.dumps(doc))
+    print(json.dumps(doc))
+elif bad and mode == "shape":
+    print('{"version":"2.1.0","runs":null}')
+else:
+    print(json.dumps(doc))
+sys.exit(2 if bad and mode == "error" else 1)
+TOOL
+for mode in silent signal malformed multiple shape error; do
+  for bad_batch in 1 "$batches"; do
+    rm -f "$tmp/batch-count"
+    if PATH="$tmp:$PATH" RUNNER_TEMP="$tmp" TOOL="m1-lint" \
+      EXTRA_FLAG="" EXTRA_VALUE="" BATCH_MODE="$mode" BAD_BATCH="$bad_batch" \
+      bash "$runner_script" >"$tmp/batch-stdout" 2>"$tmp/batch-stderr"; then
+      fail "accepted $mode output in batch $bad_batch"
+    fi
+    [ ! -e "$out" ] || fail "left uploadable output after $mode failure"
+  done
+done
+echo "ok: invalid first or later batches prevent SARIF output"
