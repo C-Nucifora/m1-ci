@@ -174,7 +174,7 @@ out="$tmp/m1-lint.sarif"
 PATH="$tmp:$PATH" RUNNER_TEMP="$tmp" \
   INPUT_TOOL="m1-lint" INPUT_EXTRA_FLAG="--baseline" INPUT_EXTRA_VALUE="base line.json" \
   TOOL="m1-lint" EXTRA_FLAG="--baseline" EXTRA_VALUE="base line.json" \
-  bash "$runner_script" >/dev/null 2>"$tmp/err" || {
+  bash -eo pipefail "$runner_script" >/dev/null 2>"$tmp/err" || {
     echo "--- stderr ---" >&2
     cat "$tmp/err" >&2
     fail "render-sarif action shell failed (it must tolerate the tool's non-zero findings exit)"
@@ -221,6 +221,34 @@ if PATH="$tmp:$PATH" RUNNER_TEMP="$tmp" \
   fail "render-sarif accepted empty/crash output — its structural guard must fail when no valid SARIF is produced"
 fi
 echo "ok: render-sarif fails on empty/crash output (structural guard, not a bare non-empty test)"
+
+# A valid first batch must not conceal an empty or malformed later batch. Also
+# reject operational failures even if the failing tool emits valid-looking JSON.
+for failure in empty malformed operational; do
+  cat > "$crashtool" <<'TOOL'
+#!/bin/sh
+if [ -f "$RUNNER_TEMP/batch-seen" ]; then
+  case "$BATCH_FAILURE" in
+    empty) exit 2 ;;
+    malformed) printf '{}\n'; exit 1 ;;
+    operational) printf '{"version":"2.1.0","runs":[]}\n'; exit 2 ;;
+  esac
+fi
+touch "$RUNNER_TEMP/batch-seen"
+printf '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"fake"}},"results":[]}]}\n'
+exit 1
+TOOL
+  rm -f "$tmp/batch-seen"
+  if PATH="$tmp:$PATH" RUNNER_TEMP="$tmp" BATCH_FAILURE="$failure" \
+     TOOL="m1-typecheck" EXTRA_FLAG="" EXTRA_VALUE="" \
+     bash -eo pipefail "$runner_script" >/dev/null 2>"$tmp/err"; then
+    fail "render-sarif accepted a valid batch followed by a $failure batch"
+  fi
+  [ -f "$tmp/batch-seen" ] || fail "mixed-batch regression never invoked the tool"
+  grep -q 'for a batch' "$tmp/err" || fail "mixed-batch regression did not reach per-batch validation"
+  [ ! -f "$tmp/m1-typecheck.sarif" ] || fail "failed render retained a partial aggregate"
+done
+echo "ok: valid batches cannot hide missing reports, malformed reports, or operational failures"
 
 # --- Part 3: dedup — check.yml references the action, no inline render heredoc -
 

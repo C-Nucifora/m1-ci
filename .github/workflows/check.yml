@@ -226,6 +226,7 @@ jobs:
           # 0 on their own; without this the fmt job ignored the input its three
           # siblings honour. tee still writes to stdout, so the fmt problem
           # matcher annotates every line exactly as before.
+          set +e
           set -uo pipefail
           xargs -0 -a "$RUNNER_TEMP/m1-scripts.nul" m1-fmt --check 2>&1 | tee "$RUNNER_TEMP/m1-fmt.out"
           code=${PIPESTATUS[0]}
@@ -307,6 +308,7 @@ jobs:
           # on findings and that flows through the pipe; we read its status from
           # PIPESTATUS below and decide the outcome ourselves, so `-e` must not
           # abort the step before that logic runs.
+          set +e
           set -uo pipefail
           # Incremental adoption: when a baseline file is given, report only NEW
           # findings (the pre-existing snapshot is suppressed). Build the flag as
@@ -481,6 +483,7 @@ jobs:
         run: |
           # No `-e`: m1-project exits non-zero on error-level findings; we
           # surface every finding as an annotation first, then propagate.
+          set +e
           set -uo pipefail
           m1-project validate --project "$PROJECT_FILE" | tee "$RUNNER_TEMP/m1-project.out"
           code=${PIPESTATUS[0]}
@@ -554,6 +557,7 @@ jobs:
           # non-zero on findings and that flows through the pipe; we read its
           # status from PIPESTATUS below and decide the outcome ourselves, so
           # `-e` must not abort the step before that logic runs.
+          set +e
           set -uo pipefail
           proj=()
           if [ -n "$PROJECT_FILE" ]; then
@@ -629,6 +633,7 @@ jobs:
         run: |
           # No `-e`: m1-can exits 1 on drift and 2 on a config/IO/parse error,
           # and we surface an annotation naming which before propagating.
+          set +e
           set -uo pipefail
           m1-can export --check
           code=$?
